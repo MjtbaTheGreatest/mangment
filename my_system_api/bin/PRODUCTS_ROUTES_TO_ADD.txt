@@ -1,0 +1,29 @@
+// ========== يجب إضافة هذا في ملف server.dart ==========
+
+// 1. أضف import في بداية الملف:
+import 'product_handlers.dart';
+
+// 2. أضف هذه الـ routes في قسم الـ API routes:
+
+// ===== Products Management Routes =====
+app.get('/api/products', (Request request) async {
+  return await getProducts(request, db);
+});
+
+app.get('/api/products/category/<category>', (Request request, String category) async {
+  return await getProductsByCategory(request, db, category);
+});
+
+app.post('/api/products', (Request request) async {
+  return await createProduct(request, db);
+});
+
+app.put('/api/products/<id>', (Request request, String id) async {
+  return await updateProduct(request, db, id);
+});
+
+app.delete('/api/products/<id>', (Request request, String id) async {
+  return await deleteProduct(request, db, id);
+});
+
+// ========== انتهى ==========
