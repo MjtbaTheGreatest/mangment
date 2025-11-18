@@ -3,9 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // استخدم localhost للاختبار المحلي
-  // بعد تشغيل Cloudflare Tunnel، غير إلى: https://admin.taif.digital/api
-  static const String baseUrl = 'http://127.0.0.1:53365/api';
+  // Production API endpoint via Cloudflare Tunnel
+  static const String baseUrl = 'https://admin.taif.digital/api';
 
   static Future<Map<String, dynamic>> login(
       String username, String password) async {
