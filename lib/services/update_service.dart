@@ -6,10 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 /// خدمة التحديث التلقائي للبرنامج
 class UpdateService {
   // رابط ملف الإصدار على GitHub
-  static const String versionUrl = 
-      'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/version.json';
-  
-  // رابط صفحة الإصدارات
+  static const String versionUrl =
+      'https://raw.githubusercontent.com/MjtbaTheGreatest/mangment/main/version.json';  // رابط صفحة الإصدارات
   static const String releasesUrl = 
       'https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest';
 
