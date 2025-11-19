@@ -88,7 +88,9 @@ class UpdateService {
         await updatesDir.create(recursive: true);
       }
       
-      final fileName = 'my_system_v$version.exe';
+      // تحديد اسم الملف بناءً على رابط التحميل
+      final urlFileName = downloadUrl.split('/').last;
+      final fileName = urlFileName.isNotEmpty ? urlFileName : 'my_system_setup_v$version.exe';
       final filePath = '${updatesDir.path}\\$fileName';
       final file = File(filePath);
       
@@ -188,8 +190,8 @@ class UpdateService {
     try {
       print('🔄 بدء تثبيت التحديث: $filePath');
       
-      final file = File(filePath);
-      if (!await file.exists()) {
+      final updateFile = File(filePath);
+      if (!await updateFile.exists()) {
         return {
           'success': false,
           'error': 'ملف التحديث غير موجود',
@@ -197,15 +199,51 @@ class UpdateService {
       }
       
       if (Platform.isWindows) {
-        // تشغيل المثبت الجديد
+        // الحصول على مسار البرنامج الحالي
+        final currentExePath = Platform.resolvedExecutable;
+        final currentDir = File(currentExePath).parent.path;
+        
+        print('📂 المسار الحالي: $currentExePath');
+        print('📁 المجلد الحالي: $currentDir');
+        
+        // إنشاء سكريبت PowerShell للتحديث
+        final scriptPath = '${updateFile.parent.path}\\update_script.ps1';
+        final script = '''
+# انتظار إغلاق البرنامج
+Start-Sleep -Seconds 2
+
+# نسخ الملف الجديد مكان القديم
+try {
+    Copy-Item -Path "$filePath" -Destination "$currentExePath" -Force
+    Write-Host "تم تحديث البرنامج بنجاح"
+    
+    # تشغيل البرنامج الجديد
+    Start-Process "$currentExePath"
+} catch {
+    Write-Host "خطأ: \$_"
+    Read-Host "اضغط Enter للإغلاق"
+}
+
+# حذف السكريبت نفسه
+Remove-Item "\$PSCommandPath" -Force
+''';
+        
+        final scriptFile = File(scriptPath);
+        await scriptFile.writeAsString(script);
+        
+        // تشغيل السكريبت
         await Process.start(
-          filePath,
-          [],
+          'powershell.exe',
+          [
+            '-ExecutionPolicy', 'Bypass',
+            '-WindowStyle', 'Hidden',
+            '-File', scriptPath,
+          ],
           mode: ProcessStartMode.detached,
         );
         
-        // إغلاق التطبيق الحالي بعد ثانية واحدة
-        await Future.delayed(const Duration(seconds: 1));
+        // إغلاق التطبيق الحالي
+        await Future.delayed(const Duration(milliseconds: 500));
         exit(0);
       }
       
@@ -243,14 +281,23 @@ class UpdateService {
 
   /// الحصول على رابط تحميل نسخة Windows من assets
   static String? _getWindowsDownloadUrl(List<dynamic> assets) {
+    // البحث عن ملف المثبت أولاً (Inno Setup)
     for (var asset in assets) {
       final name = (asset['name'] as String).toLowerCase();
-      if (name.endsWith('.exe') || 
-          name.endsWith('.msi') ||
-          name.endsWith('.zip') && name.contains('windows')) {
+      // البحث عن ملف installer أو setup
+      if ((name.contains('setup') || name.contains('installer')) && name.endsWith('.exe')) {
         return asset['browser_download_url'] as String;
       }
     }
+    
+    // إذا لم يجد، ابحث عن أي exe
+    for (var asset in assets) {
+      final name = (asset['name'] as String).toLowerCase();
+      if (name.endsWith('.exe')) {
+        return asset['browser_download_url'] as String;
+      }
+    }
+    
     return releasesUrl; // إذا لم يجد ملف مباشر، يعيد رابط صفحة الإصدارات
   }
 
