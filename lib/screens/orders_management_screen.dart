@@ -632,18 +632,17 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Ti
             ),
             const SizedBox(width: 8),
             
-            // حذف
-            if (_role == 'admin')
-              FadeInRight(
-                duration: const Duration(milliseconds: 300),
-                delay: const Duration(milliseconds: 150),
-                child: _buildActionButton(
-                  icon: Icons.delete,
-                  label: '\u062d\u0630\u0641',
-                  onTap: _deleteSelected,
-                  color: Colors.red,
-                ),
+            // حذف - يظهر للجميع
+            FadeInRight(
+              duration: const Duration(milliseconds: 300),
+              delay: const Duration(milliseconds: 150),
+              child: _buildActionButton(
+                icon: Icons.delete,
+                label: '\u062d\u0630\u0641',
+                onTap: _deleteSelected,
+                color: Colors.red,
               ),
+            ),
             const SizedBox(width: 8),
             
             // إلغاء

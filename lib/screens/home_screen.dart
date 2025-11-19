@@ -6,9 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
+import '../services/update_service.dart';
 import '../widgets/animated_notification.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// الصفحة الرئيسية - تسجيل الطلبات
 class HomeScreen extends StatefulWidget {
@@ -34,6 +36,256 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadCardSize();
     _checkAuthAndLoadUserInfo();
     _loadProducts();
+    _checkForUpdates();
+  }
+
+  /// التحقق من وجود تحديثات عند فتح البرنامج
+  Future<void> _checkForUpdates() async {
+    await Future.delayed(const Duration(seconds: 2)); // انتظار 2 ثانية بعد الفتح
+    
+    if (!mounted) return;
+    
+    final result = await UpdateService.checkForUpdate();
+    
+    if (result['hasUpdate'] == true && mounted) {
+      _showUpdateDialog(
+        currentVersion: result['currentVersion'],
+        latestVersion: result['latestVersion'],
+        changelog: result['changelog'],
+        downloadUrl: result['downloadUrl'],
+        mandatory: result['mandatory'] ?? false,
+      );
+    }
+  }
+
+  /// عرض نافذة التحديث
+  void _showUpdateDialog({
+    required String currentVersion,
+    required String latestVersion,
+    required String changelog,
+    required String downloadUrl,
+    required bool mandatory,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: !mandatory,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => !mandatory,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [
+                  AppColors.primaryGold.withOpacity(0.95),
+                  AppColors.mediumGold.withOpacity(0.95),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryGold.withOpacity(0.5),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.pureBlack.withOpacity(0.2),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.system_update,
+                          color: Colors.green,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'تحديث جديد متاح!',
+                              style: AppTextStyles.headlineLarge.copyWith(
+                                color: AppColors.pureBlack,
+                                fontSize: 22,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'الإصدار $latestVersion',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.pureBlack.withOpacity(0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'النسخة الحالية:',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.pureBlack.withOpacity(0.7),
+                            ),
+                          ),
+                          Text(
+                            currentVersion,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.pureBlack,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'الإصدار الجديد:',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.pureBlack.withOpacity(0.7),
+                            ),
+                          ),
+                          Text(
+                            latestVersion,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'ما الجديد:',
+                        style: AppTextStyles.bodyLarge.copyWith(
+                          color: AppColors.pureBlack,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.pureBlack.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: SingleChildScrollView(
+                          child: Text(
+                            changelog,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.pureBlack.withOpacity(0.9),
+                              height: 1.6,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Actions
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Row(
+                    children: [
+                      if (!mandatory)
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.pureBlack,
+                              side: BorderSide(color: AppColors.pureBlack.withOpacity(0.3)),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              'لاحقاً',
+                              style: AppTextStyles.bodyLarge.copyWith(
+                                color: AppColors.pureBlack,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!mandatory) const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await UpdateService.openDownloadPage(downloadUrl);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.download, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'تحميل',
+                                style: AppTextStyles.bodyLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadCardSize() async {

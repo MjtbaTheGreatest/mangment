@@ -5,11 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// خدمة التحديث التلقائي للبرنامج
 class UpdateService {
-  // رابط ملف الإصدار على GitHub
-  static const String versionUrl =
-      'https://raw.githubusercontent.com/MjtbaTheGreatest/mangment/main/version.json';  // رابط صفحة الإصدارات
-  static const String releasesUrl = 
-      'https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest';
+  // معلومات المستودع على GitHub
+  static const String repoOwner = 'MjtbaTheGreatest';
+  static const String repoName = 'mangment';
+  static const String githubApiUrl = 'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
+  static const String releasesUrl = 'https://github.com/$repoOwner/$repoName/releases/latest';
 
   /// فحص وجود تحديث جديد
   static Future<Map<String, dynamic>> checkForUpdate() async {
@@ -21,33 +21,37 @@ class UpdateService {
 
       print('🔍 النسخة الحالية: $currentVersion (Build $currentBuildNumber)');
 
-      // جلب معلومات الإصدار من السيرفر
+      // جلب معلومات آخر إصدار من GitHub API
       final response = await http.get(
-        Uri.parse(versionUrl),
-        headers: {'Cache-Control': 'no-cache'},
+        Uri.parse(githubApiUrl),
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Cache-Control': 'no-cache',
+        },
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final latestVersion = data['version'] as String;
-        final latestBuildNumber = data['build_number'] as int;
-        final downloadUrl = data['download_url'] as String;
-        final changelog = data['changelog'] as String;
-        final isMandatory = data['mandatory'] as bool? ?? false;
+        final tagName = data['tag_name'] as String;
+        final latestVersion = tagName.replaceAll('v', '').replaceAll('V', '');
+        final downloadUrl = _getWindowsDownloadUrl(data['assets'] as List<dynamic>);
+        final changelog = data['body'] as String? ?? 'لا توجد ملاحظات إصدار';
 
-        print('📦 آخر إصدار: $latestVersion (Build $latestBuildNumber)');
+        print('📦 آخر إصدار: $latestVersion');
+        print('📥 رابط التحميل: $downloadUrl');
 
-        // مقارنة رقم البناء
-        if (latestBuildNumber > currentBuildNumber) {
+        // مقارنة النسخ
+        final needsUpdate = compareVersions(latestVersion, currentVersion) > 0;
+
+        if (needsUpdate) {
           return {
             'hasUpdate': true,
             'currentVersion': currentVersion,
             'latestVersion': latestVersion,
             'currentBuild': currentBuildNumber,
-            'latestBuild': latestBuildNumber,
             'downloadUrl': downloadUrl,
             'changelog': changelog,
-            'mandatory': isMandatory,
+            'mandatory': false,
           };
         }
 
@@ -76,16 +80,37 @@ class UpdateService {
     }
   }
 
+  /// الحصول على رابط تحميل نسخة Windows من assets
+  static String? _getWindowsDownloadUrl(List<dynamic> assets) {
+    for (var asset in assets) {
+      final name = (asset['name'] as String).toLowerCase();
+      if (name.endsWith('.exe') || 
+          name.endsWith('.msi') ||
+          name.endsWith('.zip') && name.contains('windows')) {
+        return asset['browser_download_url'] as String;
+      }
+    }
+    return releasesUrl; // إذا لم يجد ملف مباشر، يعيد رابط صفحة الإصدارات
+  }
+
   /// مقارنة الإصدارات (semantic versioning)
   static int compareVersions(String v1, String v2) {
-    final parts1 = v1.split('.').map(int.parse).toList();
-    final parts2 = v2.split('.').map(int.parse).toList();
+    try {
+      final parts1 = v1.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      final parts2 = v2.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
-    for (int i = 0; i < 3; i++) {
-      if (parts1[i] > parts2[i]) return 1;
-      if (parts1[i] < parts2[i]) return -1;
+      for (int i = 0; i < 3; i++) {
+        final p1 = parts1.length > i ? parts1[i] : 0;
+        final p2 = parts2.length > i ? parts2[i] : 0;
+        
+        if (p1 > p2) return 1;
+        if (p1 < p2) return -1;
+      }
+
+      return 0;
+    } catch (e) {
+      print('❌ خطأ في مقارنة الإصدارات: $e');
+      return 0;
     }
-
-    return 0;
   }
 }
