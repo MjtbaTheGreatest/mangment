@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// خدمة التحديث التلقائي للبرنامج
 class UpdateService {
@@ -10,6 +12,10 @@ class UpdateService {
   static const String repoName = 'mangment';
   static const String githubApiUrl = 'https://api.github.com/repos/$repoOwner/$repoName/releases/latest';
   static const String releasesUrl = 'https://github.com/$repoOwner/$repoName/releases/latest';
+  
+  // مفاتيح التخزين
+  static const String _downloadedUpdatePathKey = 'downloaded_update_path';
+  static const String _downloadedUpdateVersionKey = 'downloaded_update_version';
 
   /// فحص وجود تحديث جديد
   static Future<Map<String, dynamic>> checkForUpdate() async {
@@ -66,17 +72,172 @@ class UpdateService {
     }
   }
 
-  /// فتح صفحة التحميل
-  static Future<void> openDownloadPage(String url) async {
+  /// تحميل التحديث
+  static Future<Map<String, dynamic>> downloadUpdate(
+    String downloadUrl,
+    String version,
+    Function(double progress) onProgress,
+  ) async {
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      print('📥 بدء تحميل التحديث من: $downloadUrl');
+      
+      // إنشاء مجلد للتحديثات
+      final appDir = await getApplicationDocumentsDirectory();
+      final updatesDir = Directory('${appDir.path}\\Updates');
+      if (!await updatesDir.exists()) {
+        await updatesDir.create(recursive: true);
+      }
+      
+      final fileName = 'my_system_v$version.exe';
+      final filePath = '${updatesDir.path}\\$fileName';
+      final file = File(filePath);
+      
+      // حذف الملف القديم إذا كان موجوداً
+      if (await file.exists()) {
+        await file.delete();
+      }
+      
+      // تحميل الملف
+      final request = http.Request('GET', Uri.parse(downloadUrl));
+      final response = await request.send();
+      
+      if (response.statusCode == 200) {
+        final total = response.contentLength ?? 0;
+        int received = 0;
+        final sink = file.openWrite();
+        
+        await for (var chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) {
+            final progress = received / total;
+            onProgress(progress);
+            print('📊 التقدم: ${(progress * 100).toStringAsFixed(1)}%');
+          }
+        }
+        
+        await sink.close();
+        
+        // حفظ معلومات التحديث المحمل
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_downloadedUpdatePathKey, filePath);
+        await prefs.setString(_downloadedUpdateVersionKey, version);
+        
+        print('✅ تم تحميل التحديث إلى: $filePath');
+        
+        return {
+          'success': true,
+          'filePath': filePath,
+          'version': version,
+        };
       } else {
-        print('❌ لا يمكن فتح الرابط: $url');
+        return {
+          'success': false,
+          'error': 'فشل التحميل: ${response.statusCode}',
+        };
       }
     } catch (e) {
-      print('❌ خطأ في فتح رابط التحميل: $e');
+      print('❌ خطأ في تحميل التحديث: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// التحقق من وجود تحديث محمل مسبقاً
+  static Future<Map<String, dynamic>> checkDownloadedUpdate() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final filePath = prefs.getString(_downloadedUpdatePathKey);
+      final version = prefs.getString(_downloadedUpdateVersionKey);
+      
+      if (filePath == null || version == null) {
+        return {'hasDownloadedUpdate': false};
+      }
+      
+      final file = File(filePath);
+      if (!await file.exists()) {
+        // الملف غير موجود، حذف المعلومات المحفوظة
+        await prefs.remove(_downloadedUpdatePathKey);
+        await prefs.remove(_downloadedUpdateVersionKey);
+        return {'hasDownloadedUpdate': false};
+      }
+      
+      // التحقق من أن الإصدار المحمل أحدث من الحالي
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+      
+      if (compareVersions(version, currentVersion) > 0) {
+        return {
+          'hasDownloadedUpdate': true,
+          'filePath': filePath,
+          'version': version,
+        };
+      }
+      
+      return {'hasDownloadedUpdate': false};
+    } catch (e) {
+      print('❌ خطأ في التحقق من التحديث المحمل: $e');
+      return {'hasDownloadedUpdate': false};
+    }
+  }
+
+  /// تثبيت التحديث وإعادة تشغيل البرنامج
+  static Future<Map<String, dynamic>> installUpdate(String filePath) async {
+    try {
+      print('🔄 بدء تثبيت التحديث: $filePath');
+      
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return {
+          'success': false,
+          'error': 'ملف التحديث غير موجود',
+        };
+      }
+      
+      if (Platform.isWindows) {
+        // تشغيل المثبت الجديد
+        await Process.start(
+          filePath,
+          [],
+          mode: ProcessStartMode.detached,
+        );
+        
+        // إغلاق التطبيق الحالي بعد ثانية واحدة
+        await Future.delayed(const Duration(seconds: 1));
+        exit(0);
+      }
+      
+      return {'success': true};
+    } catch (e) {
+      print('❌ خطأ في تثبيت التحديث: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// حذف التحديث المحمل
+  static Future<void> clearDownloadedUpdate() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final filePath = prefs.getString(_downloadedUpdatePathKey);
+      
+      if (filePath != null) {
+        final file = File(filePath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+      
+      await prefs.remove(_downloadedUpdatePathKey);
+      await prefs.remove(_downloadedUpdateVersionKey);
+      
+      print('🗑️ تم حذف التحديث المحمل');
+    } catch (e) {
+      print('❌ خطأ في حذف التحديث: $e');
     }
   }
 

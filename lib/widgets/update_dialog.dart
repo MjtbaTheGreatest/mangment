@@ -255,7 +255,10 @@ class UpdateDialog extends StatelessWidget {
                           flex: isMandatory ? 1 : 2,
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                              await UpdateService.openDownloadPage(downloadUrl);
+                              // TODO: استدعاء دالة التحميل والتثبيت من الإعدادات
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('للتحميل، اذهب إلى الإعدادات > التحقق من التحديثات')),
+                              );
                               if (!isMandatory && context.mounted) {
                                 Navigator.pop(context);
                               }

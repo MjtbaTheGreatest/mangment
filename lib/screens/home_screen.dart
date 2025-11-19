@@ -10,7 +10,6 @@ import '../services/update_service.dart';
 import '../widgets/animated_notification.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 /// الصفحة الرئيسية - تسجيل الطلبات
 class HomeScreen extends StatefulWidget {
@@ -250,7 +249,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ElevatedButton(
                           onPressed: () async {
                             Navigator.pop(context);
-                            await UpdateService.openDownloadPage(downloadUrl);
+                            // TODO: استدعاء دالة التحميل والتثبيت
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('للتحميل، اذهب إلى الإعدادات > التحقق من التحديثات')),
+                            );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,

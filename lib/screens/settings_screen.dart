@@ -487,6 +487,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// التحقق من التحديثات يدوياً
   Future<void> _checkForUpdates() async {
+    // أولاً: التحقق من وجود تحديث محمل مسبقاً
+    final downloadedUpdate = await UpdateService.checkDownloadedUpdate();
+    
+    if (downloadedUpdate['hasDownloadedUpdate'] == true) {
+      _showInstallDownloadedUpdateDialog(
+        version: downloadedUpdate['version'],
+        filePath: downloadedUpdate['filePath'],
+      );
+      return;
+    }
+    
     // عرض مؤشر التحميل
     showDialog(
       context: context,
@@ -539,6 +550,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'أنت تستخدم أحدث إصدار من البرنامج',
       );
     }
+  }
+
+  /// عرض نافذة تثبيت التحديث المحمل مسبقاً
+  void _showInstallDownloadedUpdateDialog({
+    required String version,
+    required String filePath,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: Colors.green,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'تحديث جاهز للتثبيت',
+                    style: AppTextStyles.headlineMedium.copyWith(
+                      color: Colors.green,
+                    ),
+                  ),
+                  Text(
+                    'الإصدار $version',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'تم تحميل التحديث مسبقاً وجاهز للتثبيت. هل تريد تثبيته الآن؟',
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'لاحقاً',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await UpdateService.clearDownloadedUpdate();
+              _showSuccessDialog(
+                'تم الحذف',
+                'تم حذف التحديث المحمل',
+              );
+            },
+            child: Text(
+              'حذف',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.error,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _installUpdate(filePath);
+            },
+            icon: const Icon(Icons.install_desktop, size: 20),
+            label: Text(
+              'تثبيت الآن',
+              style: AppTextStyles.bodyLarge.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// عرض نافذة التحديث
@@ -646,11 +767,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton.icon(
             onPressed: () async {
               Navigator.pop(context);
-              await UpdateService.openDownloadPage(downloadUrl);
+              await _downloadAndInstallUpdate(
+                downloadUrl: downloadUrl,
+                version: latestVersion,
+              );
             },
             icon: const Icon(Icons.download, size: 20),
             label: Text(
-              'تحميل',
+              'تحميل وتثبيت',
               style: AppTextStyles.bodyLarge.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -759,6 +883,277 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// تحميل وتثبيت التحديث
+  Future<void> _downloadAndInstallUpdate({
+    required String downloadUrl,
+    required String version,
+  }) async {
+    double downloadProgress = 0.0;
+    
+    // عرض نافذة التقدم
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.charcoal,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(
+              color: AppColors.primaryGold,
+              width: 2,
+            ),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.download,
+                  color: Colors.blue,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'جاري التحميل...',
+                style: AppTextStyles.headlineMedium.copyWith(
+                  color: AppColors.textGold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(
+                value: downloadProgress,
+                backgroundColor: AppColors.textSecondary.withOpacity(0.2),
+                color: Colors.blue,
+                minHeight: 8,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${(downloadProgress * 100).toStringAsFixed(1)}%',
+                style: AppTextStyles.bodyLarge.copyWith(
+                  color: AppColors.textGold,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'الإصدار: $version',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // تحميل التحديث
+    final result = await UpdateService.downloadUpdate(
+      downloadUrl,
+      version,
+      (progress) {
+        if (mounted) {
+          setState(() {
+            downloadProgress = progress;
+          });
+        }
+      },
+    );
+
+    if (!mounted) return;
+    
+    // إغلاق نافذة التقدم
+    Navigator.pop(context);
+
+    if (result['success'] == true) {
+      // عرض نافذة التثبيت
+      _showInstallConfirmDialog(
+        version: version,
+        filePath: result['filePath'],
+      );
+    } else {
+      _showErrorDialog(
+        'فشل التحميل',
+        result['error'] ?? 'حدث خطأ أثناء تحميل التحديث',
+      );
+    }
+  }
+
+  /// عرض نافذة تأكيد التثبيت
+  void _showInstallConfirmDialog({
+    required String version,
+    required String filePath,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: Colors.green,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'تم التحميل بنجاح!',
+                style: AppTextStyles.headlineMedium.copyWith(
+                  color: Colors.green,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'تم تحميل الإصدار $version بنجاح.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'سيتم إغلاق البرنامج وتشغيل المثبت',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'تثبيت لاحقاً',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _installUpdate(filePath);
+            },
+            icon: const Icon(Icons.install_desktop, size: 20),
+            label: Text(
+              'تثبيت الآن',
+              style: AppTextStyles.bodyLarge.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// تثبيت التحديث
+  Future<void> _installUpdate(String filePath) async {
+    // عرض مؤشر التحميل
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.charcoal,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: AppColors.primaryGold,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'جاري التثبيت...',
+                style: AppTextStyles.bodyLarge.copyWith(
+                  color: AppColors.textGold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final result = await UpdateService.installUpdate(filePath);
+    
+    if (!mounted) return;
+    
+    Navigator.pop(context);
+
+    if (result['success'] != true) {
+      _showErrorDialog(
+        'فشل التثبيت',
+        result['error'] ?? 'حدث خطأ أثناء تثبيت التحديث',
+      );
+    }
+    // إذا نجح التثبيت، سيتم إغلاق البرنامج تلقائياً
   }
 
   void _showAddUserDialog() {
