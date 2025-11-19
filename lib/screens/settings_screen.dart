@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
+import '../services/update_service.dart';
 
 /// صفحة الإعدادات (للمدير فقط)
 class SettingsScreen extends StatefulWidget {
@@ -219,6 +221,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
+                  
+                  const SizedBox(height: 32),
+                  
+                  // Section Title - About
+                  FadeInLeft(
+                    duration: const Duration(milliseconds: 600),
+                    delay: const Duration(milliseconds: 900),
+                    child: Text(
+                      'حول البرنامج',
+                      style: AppTextStyles.headlineSmall.copyWith(
+                        color: AppColors.textGold,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  _buildSettingCard(
+                    icon: Icons.info_outline,
+                    title: 'معلومات البرنامج',
+                    subtitle: 'رقم الإصدار والتحديثات',
+                    color: Colors.blue,
+                    delay: 1000,
+                    onTap: () {
+                      _showAppInfoDialog();
+                    },
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  _buildSettingCard(
+                    icon: Icons.system_update,
+                    title: 'التحقق من التحديثات',
+                    subtitle: 'البحث عن إصدار جديد',
+                    color: Colors.green,
+                    delay: 1100,
+                    onTap: () {
+                      _checkForUpdates();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -315,6 +357,406 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// عرض معلومات البرنامج
+  Future<void> _showAppInfoDialog() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: AppColors.primaryGold,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: AppColors.goldGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.info_outline,
+                color: AppColors.pureBlack,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'معلومات البرنامج',
+                style: AppTextStyles.headlineMedium.copyWith(
+                  color: AppColors.textGold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('اسم البرنامج:', packageInfo.appName),
+              const SizedBox(height: 12),
+              _buildInfoRow('رقم الإصدار:', packageInfo.version),
+              const SizedBox(height: 12),
+              _buildInfoRow('رقم البناء:', packageInfo.buildNumber),
+              const SizedBox(height: 12),
+              _buildInfoRow('المطور:', 'MjtbaTheGreatest'),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGold.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.primaryGold.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: AppColors.success,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'البرنامج محدث ويعمل بشكل صحيح',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'إغلاق',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.primaryGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textGold,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// التحقق من التحديثات يدوياً
+  Future<void> _checkForUpdates() async {
+    // عرض مؤشر التحميل
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.charcoal,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: AppColors.primaryGold,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'جاري البحث عن تحديثات...',
+                style: AppTextStyles.bodyLarge.copyWith(
+                  color: AppColors.textGold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final result = await UpdateService.checkForUpdate();
+    
+    if (!mounted) return;
+    
+    // إغلاق مؤشر التحميل
+    Navigator.pop(context);
+
+    if (result['hasUpdate'] == true) {
+      _showUpdateDialog(
+        currentVersion: result['currentVersion'],
+        latestVersion: result['latestVersion'],
+        changelog: result['changelog'],
+        downloadUrl: result['downloadUrl'],
+      );
+    } else if (result['error'] != null) {
+      _showErrorDialog('فشل التحقق من التحديثات', result['error']);
+    } else {
+      _showSuccessDialog(
+        'لا توجد تحديثات',
+        'أنت تستخدم أحدث إصدار من البرنامج',
+      );
+    }
+  }
+
+  /// عرض نافذة التحديث
+  void _showUpdateDialog({
+    required String currentVersion,
+    required String latestVersion,
+    required String changelog,
+    required String downloadUrl,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: Colors.green,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.system_update,
+                color: Colors.green,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'تحديث متاح!',
+                    style: AppTextStyles.headlineMedium.copyWith(
+                      color: Colors.green,
+                    ),
+                  ),
+                  Text(
+                    'الإصدار $latestVersion',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('النسخة الحالية:', currentVersion),
+              const SizedBox(height: 8),
+              _buildInfoRow('الإصدار الجديد:', latestVersion),
+              const SizedBox(height: 20),
+              Text(
+                'ما الجديد:',
+                style: AppTextStyles.bodyLarge.copyWith(
+                  color: AppColors.textGold,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.pureBlack.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    changelog,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.6,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'لاحقاً',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              await UpdateService.openDownloadPage(downloadUrl);
+            },
+            icon: const Icon(Icons.download, size: 20),
+            label: Text(
+              'تحميل',
+              style: AppTextStyles.bodyLarge.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: AppColors.error,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: AppColors.error, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: AppTextStyles.headlineMedium.copyWith(
+                color: AppColors.error,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'حسناً',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.primaryGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSuccessDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.charcoal,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: AppColors.success,
+            width: 2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: AppColors.success, size: 28),
+            const SizedBox(width: 12),
+            Text(
+              title,
+              style: AppTextStyles.headlineMedium.copyWith(
+                color: AppColors.success,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'حسناً',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.primaryGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
