@@ -43,8 +43,8 @@ Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 Name: "desktopicon"; Description: "إنشاء اختصار على سطح المكتب"; GroupDescription: "اختصارات إضافية:"; Flags: unchecked
 
 [Files]
-; نسخ جميع ملفات البرنامج
-Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; نسخ جميع ملفات البرنامج - مع استبدال قسري للملفات القديمة
+Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs uninsrestartdelete
 
 [Icons]
 ; اختصار في قائمة البرامج
@@ -63,32 +63,59 @@ Type: filesandordirs; Name: "{app}\data"
 Type: filesandordirs; Name: "{app}\logs"
 
 [Code]
-// دالة للتحقق من إصدار سابق
+// دالة للتحقق من إصدار سابق وإلغاء تثبيته تلقائياً
 function InitializeSetup(): Boolean;
 var
   ResultCode: Integer;
   OldPath: String;
+  UninstallString: String;
 begin
   Result := True;
   
   // التحقق من وجود إصدار سابق
   if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{67E14DCF-FDE2-4A6A-A22E-6E53119042DF}_is1', 'InstallLocation', OldPath) then
   begin
-    if MsgBox('تم العثور على إصدار سابق من البرنامج. هل تريد إلغاء تثبيته قبل المتابعة؟', mbConfirmation, MB_YESNO) = IDYES then
+    // إلغاء التثبيت القديم تلقائياً بدون سؤال
+    MsgBox('سيتم إلغاء تثبيت النسخة السابقة وتثبيت النسخة الجديدة...', mbInformation, MB_OK);
+    
+    // إيقاف البرنامج إذا كان يعمل
+    if Exec('taskkill', '/F /IM my_system.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Sleep(1000);
+    
+    // إلغاء التثبيت القديم بصمت
+    if RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{67E14DCF-FDE2-4A6A-A22E-6E53119042DF}_is1', 'UninstallString', UninstallString) then
     begin
-      // إلغاء التثبيت القديم
-      Exec(OldPath + '\unins000.exe', '/SILENT', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      UninstallString := RemoveQuotes(UninstallString);
+      Exec(UninstallString, '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(2000); // انتظار اكتمال الحذف
     end;
   end;
 end;
 
-// دالة تُنفذ بعد اكتمال التثبيت
+// دالة تُنفذ قبل التثبيت لضمان حذف الملفات القديمة
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  AppDir: String;
 begin
+  if CurStep = ssInstall then
+  begin
+    AppDir := ExpandConstant('{app}');
+    
+    // حذف الملفات الرئيسية القديمة إذا كانت موجودة
+    if FileExists(AppDir + '\my_system.exe') then
+    begin
+      DeleteFile(AppDir + '\my_system.exe');
+    end;
+    
+    if FileExists(AppDir + '\flutter_windows.dll') then
+    begin
+      DeleteFile(AppDir + '\flutter_windows.dll');
+    end;
+  end;
+  
   if CurStep = ssPostInstall then
   begin
-    // يمكن إضافة خطوات إضافية هنا
-    // مثل: إنشاء قاعدة البيانات الأولية
+    // يمكن إضافة خطوات إضافية هنا بعد التثبيت
   end;
 end;
 
