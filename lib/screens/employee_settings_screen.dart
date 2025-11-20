@@ -459,71 +459,77 @@ class _EmployeeSettingsScreenState extends State<EmployeeSettingsScreen> {
     required String version,
   }) async {
     double downloadProgress = 0.0;
+    void Function(void Function())? dialogSetState;
     
     // عرض نافذة التقدم
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.charcoal,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(
-              color: AppColors.primaryGold,
-              width: 2,
+        builder: (context, setDialogState) {
+          // حفظ reference للـ setState
+          dialogSetState = setDialogState;
+          
+          return AlertDialog(
+            backgroundColor: AppColors.charcoal,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(
+                color: AppColors.primaryGold,
+                width: 2,
+              ),
             ),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.download,
+                    color: Colors.blue,
+                    size: 28,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.download,
+                const SizedBox(width: 16),
+                Text(
+                  'جاري التحميل...',
+                  style: AppTextStyles.headlineMedium.copyWith(
+                    color: AppColors.textGold,
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: downloadProgress,
+                  backgroundColor: AppColors.textSecondary.withOpacity(0.2),
                   color: Colors.blue,
-                  size: 28,
+                  minHeight: 8,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Text(
-                'جاري التحميل...',
-                style: AppTextStyles.headlineMedium.copyWith(
-                  color: AppColors.textGold,
+                const SizedBox(height: 16),
+                Text(
+                  '${(downloadProgress * 100).toStringAsFixed(1)}%',
+                  style: AppTextStyles.bodyLarge.copyWith(
+                    color: AppColors.textGold,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(
-                value: downloadProgress,
-                backgroundColor: AppColors.textSecondary.withOpacity(0.2),
-                color: Colors.blue,
-                minHeight: 8,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '${(downloadProgress * 100).toStringAsFixed(1)}%',
-                style: AppTextStyles.bodyLarge.copyWith(
-                  color: AppColors.textGold,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 8),
+                Text(
+                  'الإصدار: $version',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'الإصدار: $version',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
 
@@ -532,11 +538,9 @@ class _EmployeeSettingsScreenState extends State<EmployeeSettingsScreen> {
       downloadUrl,
       version,
       (progress) {
-        if (mounted) {
-          setState(() {
-            downloadProgress = progress;
-          });
-        }
+        downloadProgress = progress;
+        // تحديث واجهة الـ dialog
+        dialogSetState?.call(() {});
       },
     );
 

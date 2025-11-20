@@ -1,8 +1,8 @@
 {
-  "version": "1.2.9",
-  "build_number": 5,
-  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.9/TaifManagement-Setup.exe",
-  "changelog": "🎉 إصدار 1.2.9\n\n✨ ميزات جديدة:\n• نظام التحديث الكامل للموظف\n• تحميل وتثبيت التحديثات تلقائياً\n• واجهة تحديث محسنة\n\n🔧 تحسينات:\n• تحسين تجربة التحديث\n• إضافة زر التحديث للموظف",
+  "version": "1.2.10",
+  "build_number": 6,
+  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.10/TaifManagement-Setup.exe",
+  "changelog": "🎉 إصدار 1.2.10\n\n🔧 إصلاحات:\n• إصلاح مشكلة تحديث شريط التقدم عند تحميل التحديث\n• تحسين تجربة التحديث للموظف\n• تحديث واجهة التحميل",
   "mandatory": false,
   "min_version": "1.0.0",
   "release_date": "2025-11-20",
