@@ -4,7 +4,7 @@
 ; ════════════════════════════════════════════════════════════
 
 #define MyAppName "إدارة الطيف"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.3.1"
 #define MyAppPublisher "Taif Management"
 #define MyAppExeName "my_system.exe"
 
