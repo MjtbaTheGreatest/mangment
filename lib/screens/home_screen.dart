@@ -1,8 +1,10 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
@@ -28,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _sortBy = 'الأحدث'; // خيار الفرز الافتراضي
   String _cardSize = 'صغير جداً'; // الافتراضي: صغير جداً
   List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _paymentMethods = []; // طرق الدفع من API
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadCardSize();
     _checkAuthAndLoadUserInfo();
     _loadProducts();
+    _loadPaymentMethods(); // تحميل طرق الدفع
     _checkForUpdates();
   }
 
@@ -343,6 +347,38 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print('❌ Error loading products: $e');
+    }
+  }
+
+  /// تحميل طرق الدفع من API
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:53365/api/payment-methods'),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['methods'] != null && mounted) {
+          setState(() {
+            _paymentMethods = List<Map<String, dynamic>>.from(data['methods']);
+            print('💳 Payment methods loaded: ${_paymentMethods.length}');
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error loading payment methods: $e');
+      // في حالة الخطأ، استخدم القيم الافتراضية
+      if (mounted) {
+        setState(() {
+          _paymentMethods = [
+            {'name': 'زين كاش'},
+            {'name': 'آفدين'},
+            {'name': 'آسياسيل'},
+            {'name': 'نقدي'},
+          ];
+        });
+      }
     }
   }
 
@@ -1574,26 +1610,52 @@ class _HomeScreenState extends State<HomeScreen> {
                                       style: AppTextStyles.bodyMedium.copyWith(
                                         color: AppColors.textPrimary,
                                       ),
-                                      items: [
-                                        {'value': 'زين كاش', 'emoji': '📱'},
-                                        {'value': 'آفدين', 'emoji': '💳'},
-                                        {'value': 'آسياسيل', 'emoji': '📞'},
-                                        {'value': 'نقدي', 'emoji': '💵'},
-                                      ].map((method) {
-                                        return DropdownMenuItem(
-                                          value: method['value'] as String,
-                                          child: Row(
-                                            children: [
-                                              Text(
-                                                method['emoji'] as String,
-                                                style: const TextStyle(fontSize: 20),
+                                      items: _paymentMethods.isEmpty
+                                        ? [
+                                            {'name': 'زين كاش', 'emoji': '📱'},
+                                            {'name': 'آفدين', 'emoji': '💳'},
+                                            {'name': 'آسياسيل', 'emoji': '📞'},
+                                            {'name': 'نقدي', 'emoji': '💵'},
+                                          ].map((method) {
+                                            return DropdownMenuItem(
+                                              value: method['name'] as String,
+                                              child: Row(
+                                                children: [
+                                                  Text(
+                                                    method['emoji'] as String,
+                                                    style: const TextStyle(fontSize: 20),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Text(method['name'] as String),
+                                                ],
                                               ),
-                                              const SizedBox(width: 12),
-                                              Text(method['value'] as String),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
+                                            );
+                                          }).toList()
+                                        : _paymentMethods.map((method) {
+                                            // اختيار الإيموجي المناسب
+                                            String emoji = '💳';
+                                            final name = method['name'].toString();
+                                            if (name.contains('زين')) {
+                                              emoji = '📱';
+                                            } else if (name.contains('آسيا')) emoji = '📞';
+                                            else if (name.contains('نقد')) emoji = '💵';
+                                            else if (name.contains('آفدين')) emoji = '💳';
+                                            else if (name.contains('فاست')) emoji = '⚡';
+                                            
+                                            return DropdownMenuItem(
+                                              value: name,
+                                              child: Row(
+                                                children: [
+                                                  Text(
+                                                    emoji,
+                                                    style: const TextStyle(fontSize: 20),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Text(name),
+                                                ],
+                                              ),
+                                            );
+                                          }).toList(),
                                       onChanged: (value) {
                                         setDialogState(() => paymentMethod = value!);
                                       },
@@ -1775,8 +1837,31 @@ class _HomeScreenState extends State<HomeScreen> {
                       final productName = product['name'] ?? 'غير معروف';
                       final customerName = customerNameController.text.trim();
                       final orderDetails = '$productName - $customerName';
-                      await ApiService.withdrawForOrder(cost, orderDetails);
+                      
+                      print('🔵 محاولة خصم التكلفة: $cost دينار');
+                      print('🔵 رقم الطلب: ${result['order']?['id']}');
+                      
+                      // خصم التكلفة مع حفظ كل التفاصيل
+                      final withdrawResult = await ApiService.withdrawForOrder(
+                        cost, 
+                        orderDetails,
+                        orderId: result['order']?['id'],
+                        productName: productName,
+                        customerName: customerName,
+                        customerPhone: null,
+                        sellPrice: double.tryParse(priceController.text) ?? 0,
+                      );
+                      
+                      if (withdrawResult['success'] == true) {
+                        print('✅ تم خصم التكلفة بنجاح');
+                      } else {
+                        print('❌ فشل خصم التكلفة: ${withdrawResult['message']}');
+                      }
+                    } else {
+                      print('⚠️ التكلفة صفر أو غير صالحة: $cost');
                     }
+                  } else {
+                    print('❌ فشل تسجيل الطلب، لن يتم الخصم');
                   }
 
                   if (mounted) {

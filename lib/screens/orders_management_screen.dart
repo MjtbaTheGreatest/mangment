@@ -2387,9 +2387,11 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Ti
       // تحويل إلى صورة بجودة عالية (3x للوضوح)
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      
       if (byteData == null) {
         throw Exception('فشل تحويل الصورة');
       }
+      
       Uint8List pngBytes = byteData.buffer.asUint8List();
       
       // الحصول على مجلد Downloads
@@ -2448,9 +2450,11 @@ class _OrdersManagementScreenState extends State<OrdersManagementScreen> with Ti
       // تحويل إلى صورة بجودة عالية (3x للوضوح)
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      
       if (byteData == null) {
         throw Exception('فشل تحويل الصورة');
       }
+      
       Uint8List pngBytes = byteData.buffer.asUint8List();
       
       // حفظ مؤقتاً

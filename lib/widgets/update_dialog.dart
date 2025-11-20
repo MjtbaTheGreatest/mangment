@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
-import '../services/update_service.dart';
 
 /// نافذة التحديث الإجباري
 class UpdateDialog extends StatelessWidget {

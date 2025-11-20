@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
@@ -6,6 +7,8 @@ import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
 import '../services/update_service.dart';
+import 'manage_settings_screen.dart';
+import 'employees_management_screen.dart';
 
 /// صفحة الإعدادات (للمدير فقط)
 class SettingsScreen extends StatefulWidget {
@@ -135,7 +138,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: AppColors.info,
                     delay: 400,
                     onTap: () {
-                      _showUsersListDialog();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const EmployeesManagementScreen(),
+                        ),
+                      );
                     },
                   ),
                   
@@ -162,15 +170,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: AppColors.warning,
                     delay: 600,
                     onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'قريباً: إدارة المنتجات',
-                            style: AppTextStyles.bodyMedium,
-                            textAlign: TextAlign.center,
-                          ),
-                          backgroundColor: AppColors.info,
-                          behavior: SnackBarBehavior.floating,
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ManageSettingsScreen(),
                         ),
                       );
                     },
@@ -1152,8 +1155,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'فشل التثبيت',
         result['error'] ?? 'حدث خطأ أثناء تثبيت التحديث',
       );
+    } else if (result['shouldExit'] == true) {
+      // مسح معلومات التحديث من الذاكرة فقط (بدون حذف الملف)
+      // لأن المثبت لازم يشتغل من الملف
+      await UpdateService.clearDownloadedUpdate(deleteFile: false);
+      
+      // إغلاق البرنامج لإتمام التثبيت
+      // المثبت سيقوم بإعادة تشغيل البرنامج تلقائياً
+      exit(0);
     }
-    // إذا نجح التثبيت، سيتم إغلاق البرنامج تلقائياً
   }
 
   void _showAddUserDialog() {

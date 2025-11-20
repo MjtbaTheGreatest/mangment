@@ -3,6 +3,7 @@ import 'package:animate_do/animate_do.dart';
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
+import '../widgets/app_drawer.dart';
 import 'package:intl/intl.dart';
 import 'archive_month_screen.dart';
 
@@ -299,7 +300,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: Colors.transparent,
-      endDrawer: _buildDrawer(),
+      endDrawer: const AppDrawer(currentRoute: '/archive'),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -337,6 +338,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
             builder: (context) => IconButton(
               icon: Icon(Icons.menu, color: AppColors.primaryGold),
               onPressed: () => Scaffold.of(context).openEndDrawer(),
+              tooltip: 'القائمة',
             ),
           ),
         ],
@@ -627,68 +629,4 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     );
   }
 
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.charcoal, AppColors.pureBlack],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.goldGradient,
-                      ),
-                      child: Icon(Icons.archive, size: 40, color: AppColors.pureBlack),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('الأرشيف', style: AppTextStyles.headlineMedium.copyWith(color: AppColors.textGold)),
-                    Text('نظام الأرشفة الذكي', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-              Divider(color: AppColors.glassWhite, thickness: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    _buildDrawerItem(Icons.home, 'الصفحة الرئيسية', () { Navigator.pop(context); Navigator.pushReplacementNamed(context, '/'); }),
-                    Divider(color: AppColors.glassWhite.withOpacity(0.3), thickness: 1, indent: 16, endIndent: 16),
-                    _buildDrawerItem(Icons.subscriptions, 'إدارة الاشتراكات', () { Navigator.pop(context); Navigator.pushNamed(context, '/subscriptions'); }),
-                    _buildDrawerItem(Icons.shopping_bag, 'إدارة الطلبات', () { Navigator.pop(context); Navigator.pushNamed(context, '/orders'); }),
-                    _buildDrawerItem(Icons.archive, 'الأرشيف', () => Navigator.pop(context)),
-                    const SizedBox(height: 16),
-                    Divider(color: AppColors.glassWhite, thickness: 1),
-                    _buildDrawerItem(Icons.logout, 'تسجيل الخروج', () async { if (context.mounted) Navigator.of(context).pushReplacementNamed('/login'); }),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(IconData icon, String title, VoidCallback onTap) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.primaryGold),
-      title: Text(title, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary)),
-      onTap: onTap,
-      hoverColor: AppColors.glassWhite,
-    );
-  }
 }

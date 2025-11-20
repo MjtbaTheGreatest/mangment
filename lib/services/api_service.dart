@@ -996,6 +996,36 @@ class ApiService {
     }
   }
 
+  // إحصائيات الشهر الحالي
+  static Future<Map<String, dynamic>> getCurrentMonthStatistics() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders/statistics/current-month'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'statistics': data,
+        };
+      } else {
+        return {'success': false, 'message': 'خطأ في جلب الإحصائيات'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
   // رأس المال - جلب المعلومات
   static Future<Map<String, dynamic>> getCapitalInfo() async {
     try {
@@ -1091,8 +1121,121 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> withdrawForOrder(double amount, String orderDetails) async {
-    return withdrawCapital(amount, description: 'تكلفة طلب: $orderDetails');
+  static Future<Map<String, dynamic>> withdrawForOrder(
+    double amount, 
+    String orderDetails, {
+    int? orderId,
+    String? productName,
+    String? customerName,
+    String? customerPhone,
+    double? sellPrice,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        print('❌ withdrawForOrder: لا يوجد token');
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      print('🔵 withdrawForOrder: إرسال طلب خصم');
+      print('   المبلغ: $amount');
+      print('   رقم الطلب: $orderId');
+      print('   المنتج: $productName');
+      print('   الزبون: $customerName');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/capital/withdraw-order'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'amount': amount,
+          'order_id': orderId,
+          'product_name': productName,
+          'customer_name': customerName,
+          'customer_phone': customerPhone,
+          'sell_price': sellPrice,
+        }),
+      );
+
+      print('🔵 withdrawForOrder: Status Code: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ withdrawForOrder: نجح الخصم');
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم خصم التكلفة من رأس المال',
+        };
+      } else {
+        final data = json.decode(response.body);
+        print('❌ withdrawForOrder: فشل الخصم - ${data['message']}');
+        return {'success': false, 'message': data['message'] ?? 'خطأ في خصم التكلفة'};
+      }
+    } catch (e) {
+      print('❌ withdrawForOrder: خطأ في الاتصال - $e');
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // الحصول على تفاصيل معاملة واحدة
+  static Future<Map<String, dynamic>> getTransactionDetails(int transactionId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/capital/transaction/$transactionId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data;
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في جلب التفاصيل'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // حذف معاملة واحدة
+  static Future<Map<String, dynamic>> deleteTransaction(int transactionId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/capital/transactions/single/$transactionId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم حذف المعاملة بنجاح',
+        };
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في حذف المعاملة'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
   }
 
   // رأس المال - حذف العمليات حسب التاريخ
@@ -1508,6 +1651,155 @@ class ApiService {
       } else {
         final data = json.decode(response.body);
         return {'success': false, 'message': data['error'] ?? 'خطأ في الحذف'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // ================== وظائف أرشفة السجل المالي ==================
+
+  // أرشفة معاملة واحدة
+  static Future<Map<String, dynamic>> archiveCapitalTransaction(int transactionId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/capital/archive/$transactionId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': true, 'message': data['message'] ?? 'تم الأرشفة بنجاح'};
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في الأرشفة'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // أرشفة جميع المعاملات
+  static Future<Map<String, dynamic>> archiveAllCapitalTransactions() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/capital/archive/all'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم الأرشفة بنجاح',
+          'archivedCount': data['archivedCount'] ?? 0,
+        };
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في الأرشفة'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // الحصول على المعاملات المؤرشفة
+  static Future<Map<String, dynamic>> getArchivedCapitalTransactions() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/capital/archived'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'transactions': data['transactions'] ?? [],
+        };
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في جلب الأرشيف'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // استرجاع معاملة من الأرشيف
+  static Future<Map<String, dynamic>> unarchiveCapitalTransaction(int transactionId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/capital/unarchive/$transactionId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': true, 'message': data['message'] ?? 'تم الاسترجاع بنجاح'};
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في الاسترجاع'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // حذف معاملة مؤرشفة نهائياً
+  static Future<Map<String, dynamic>> deleteArchivedCapitalTransaction(int transactionId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/capital/archived/$transactionId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': true, 'message': data['message'] ?? 'تم الحذف بنجاح'};
+      } else {
+        final data = json.decode(response.body);
+        return {'success': false, 'message': data['message'] ?? 'خطأ في الحذف'};
       }
     } catch (e) {
       return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};

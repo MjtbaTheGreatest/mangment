@@ -49,14 +49,14 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "`n✅ تم بناء المثبت بنجاح!" -ForegroundColor Green
 
-# 6. عرض معلومات الملف
+# 6. Display file info
 $InstallerFile = Get-ChildItem "$OutputDir\*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($InstallerFile) {
-    Write-Host "`n📁 الملف: $($InstallerFile.FullName)" -ForegroundColor Cyan
-    Write-Host "📊 الحجم: $([math]::Round($InstallerFile.Length / 1MB, 2)) MB" -ForegroundColor Cyan
+    Write-Host "`nFile: $($InstallerFile.FullName)" -ForegroundColor Cyan
+    Write-Host "Size: $([math]::Round($InstallerFile.Length / 1MB, 2)) MB" -ForegroundColor Cyan
     
-    # فتح المجلد
-    Write-Host "`n🎉 تم! هل تريد فتح مجلد الملف؟ (Y/N)" -ForegroundColor Green
+    # Open folder
+    Write-Host "`nDone! Open folder? (Y/N)" -ForegroundColor Green
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
         explorer.exe $OutputDir

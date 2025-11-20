@@ -366,6 +366,164 @@ Future<Response> getOrdersStatistics(Request request, Database db) async {
   }
 }
 
+// GET /api/orders/statistics/current-month - إحصائيات الشهر الحالي
+Future<Response> getCurrentMonthStatistics(Request request, Database db) async {
+  final user = _verifyToken(request);
+  if (user == null) {
+    return Response.forbidden(json.encode({'error': 'Unauthorized'}));
+  }
+
+  try {
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    
+    final startStr = startOfMonth.toIso8601String();
+    final endStr = endOfMonth.toIso8601String();
+
+    // حساب الطلبات من orders (غير المؤرشفة)
+    final activeOrdersQuery = '''
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total_sales,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN cost ELSE 0 END), 0) as total_costs
+      FROM orders 
+      WHERE archived = 0 
+        AND created_at >= ? 
+        AND created_at <= ?
+    ''';
+    final activeOrders = db.select(activeOrdersQuery, [startStr, endStr]).first;
+
+    // حساب الطلبات المؤرشفة من هذا الشهر
+    final archivedOrdersQuery = '''
+      SELECT 
+        COUNT(*) as count,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total_sales,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN cost ELSE 0 END), 0) as total_costs
+      FROM orders 
+      WHERE archived = 1 
+        AND created_at >= ? 
+        AND created_at <= ?
+    ''';
+    final archivedOrders = db.select(archivedOrdersQuery, [startStr, endStr]).first;
+
+    // الجمع
+    final totalOrders = (activeOrders['count'] as int) + (archivedOrders['count'] as int);
+    final totalSales = (activeOrders['total_sales'] as num).toDouble() + (archivedOrders['total_sales'] as num).toDouble();
+    final totalCosts = (activeOrders['total_costs'] as num).toDouble() + (archivedOrders['total_costs'] as num).toDouble();
+    final totalProfit = totalSales - totalCosts;
+    final profitMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0.0;
+
+    // إحصائيات طرق الدفع
+    final paymentMethodsQuery = '''
+      SELECT 
+        payment_method,
+        COUNT(*) as count,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total
+      FROM orders 
+      WHERE (archived = 0 OR archived = 1)
+        AND created_at >= ? 
+        AND created_at <= ?
+        AND status = "مكتمل"
+      GROUP BY payment_method
+    ''';
+    final paymentMethods = db.select(paymentMethodsQuery, [startStr, endStr]).map((row) => {
+      'method': row['payment_method'],
+      'count': row['count'],
+      'total': row['total'],
+    }).toList();
+
+    // أفضل المنتجات
+    final topProductsQuery = '''
+      SELECT 
+        product_name,
+        COUNT(*) as count,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total_revenue
+      FROM orders 
+      WHERE (archived = 0 OR archived = 1)
+        AND created_at >= ? 
+        AND created_at <= ?
+        AND status = "مكتمل"
+      GROUP BY product_name
+      ORDER BY count DESC
+      LIMIT 10
+    ''';
+    final topProducts = db.select(topProductsQuery, [startStr, endStr]).map((row) => {
+      'product_name': row['product_name'],
+      'count': row['count'],
+      'total_revenue': row['total_revenue'],
+    }).toList();
+
+    // الطلبات اليومية (آخر 30 يوم) مع الإيرادات والتكاليف
+    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+    final thirtyDaysAgoStr = thirtyDaysAgo.toIso8601String();
+    
+    final dailyOrdersQuery = '''
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN cost ELSE 0 END), 0) as total_cost
+      FROM orders 
+      WHERE (archived = 0 OR archived = 1)
+        AND created_at >= ?
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    ''';
+    final dailyOrders = db.select(dailyOrdersQuery, [thirtyDaysAgoStr]).map((row) => {
+      'date': row['date'],
+      'count': row['count'],
+      'total_revenue': row['total_revenue'],
+      'total_cost': row['total_cost'],
+    }).toList();
+
+    // البيانات الشهرية (آخر 6 أشهر)
+    final sixMonthsAgo = DateTime(now.year, now.month - 5, 1);
+    final sixMonthsAgoStr = sixMonthsAgo.toIso8601String();
+    
+    final monthlyDataQuery = '''
+      SELECT 
+        strftime('%m', created_at) as month,
+        strftime('%Y', created_at) as year,
+        COUNT(*) as total_orders,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN price ELSE 0 END), 0) as total_revenue,
+        COALESCE(SUM(CASE WHEN status = "مكتمل" THEN cost ELSE 0 END), 0) as total_cost
+      FROM orders 
+      WHERE (archived = 0 OR archived = 1)
+        AND created_at >= ?
+      GROUP BY strftime('%Y-%m', created_at)
+      ORDER BY year, month
+    ''';
+    final monthlyData = db.select(monthlyDataQuery, [sixMonthsAgoStr]).map((row) => {
+      'month': int.parse(row['month'] as String),
+      'year': int.parse(row['year'] as String),
+      'total_orders': row['total_orders'],
+      'total_revenue': row['total_revenue'],
+      'total_cost': row['total_cost'],
+    }).toList();
+
+    return Response.ok(
+      json.encode({
+        'totalOrders': totalOrders,
+        'totalRevenue': totalSales,
+        'totalCosts': totalCosts,
+        'totalProfit': totalProfit,
+        'profitMargin': profitMargin,
+        'paymentMethods': paymentMethods,
+        'topProducts': topProducts,
+        'dailyOrders': dailyOrders,
+        'monthlyData': monthlyData,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في جلب إحصائيات الشهر الحالي: $e');
+    return Response.internalServerError(
+      body: json.encode({'error': 'Failed to get current month statistics', 'details': e.toString()}),
+    );
+  }
+}
+
 // GET /api/orders/archived - جلب جميع الطلبات المؤرشفة
 Future<Response> getArchivedOrders(Request request, Database db) async {
   final user = _verifyToken(request);

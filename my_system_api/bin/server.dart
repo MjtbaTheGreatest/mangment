@@ -9,6 +9,7 @@ import 'subscription_handlers.dart' as sub;
 import 'product_handlers.dart' as prod;
 import 'order_handlers.dart' as ord;
 import 'settlement_handlers.dart' as settle;
+import 'payment_methods_handlers.dart' as payment;
 
 const String secretKey = 'your-super-secret-key-change-this-2024';
 const int port = 53365;
@@ -116,9 +117,36 @@ void main() async {
       amount REAL NOT NULL,
       description TEXT,
       created_by TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      order_id INTEGER,
+      product_name TEXT,
+      customer_name TEXT,
+      customer_phone TEXT,
+      sell_price REAL,
+      FOREIGN KEY (order_id) REFERENCES orders(id)
     )
   ''');
+  
+  // إضافة الأعمدة الجديدة للجدول الموجود
+  try {
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN order_id INTEGER');
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN product_name TEXT');
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN customer_name TEXT');
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN customer_phone TEXT');
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN sell_price REAL');
+    print('✅ تم إضافة أعمدة تفاصيل الطلب لجدول رأس المال');
+  } catch (e) {
+    // الأعمدة موجودة مسبقاً
+  }
+
+  // إضافة عمود الأرشفة
+  try {
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN is_archived INTEGER DEFAULT 0');
+    db!.execute('ALTER TABLE capital_transactions ADD COLUMN archived_at TEXT');
+    print('✅ تم إضافة أعمدة الأرشفة لجدول رأس المال');
+  } catch (e) {
+    // الأعمدة موجودة مسبقاً
+  }
 
   // جدول التحاسبات
   db!.execute('''
@@ -225,6 +253,9 @@ void main() async {
     print('📝 عمود archived موجود بالفعل');
   }
 
+  // إنشاء جدول طرق الدفع
+  payment.initializePaymentMethodsTable();
+
   final router = Router()
     ..post('/api/login', _loginHandler)
     ..post('/api/users/create', _createUserHandler)
@@ -257,13 +288,23 @@ void main() async {
     ..put('/api/orders/<id>/status', (request, id) => ord.updateOrderStatus(request, db!, id))
     ..delete('/api/orders/<id>', (request, id) => ord.deleteOrder(request, db!, id))
     ..get('/api/orders/statistics', (request) => ord.getOrdersStatistics(request, db!))
+    ..get('/api/orders/statistics/current-month', (request) => ord.getCurrentMonthStatistics(request, db!))
     ..post('/api/orders/<id>/archive', (request, id) => ord.archiveOrder(request, db!, id))
     ..post('/api/orders/<id>/unarchive', (request, id) => ord.unarchiveOrder(request, db!, id))
     // Capital routes
     ..get('/api/capital', _getCapitalInfo)
     ..post('/api/capital/add', _addCapital)
     ..post('/api/capital/withdraw', _withdrawCapital)
+    ..post('/api/capital/withdraw-order', _withdrawForOrder)
     ..delete('/api/capital/transactions/<date>', _deleteTransactionsByDate)
+    ..delete('/api/capital/transactions/single/<id>', _deleteTransaction)
+    ..get('/api/capital/transaction/<id>', _getTransactionDetails)
+    // Capital archive routes
+    ..post('/api/capital/archive/<id>', _archiveTransaction)
+    ..post('/api/capital/archive/all', _archiveAllTransactions)
+    ..get('/api/capital/archived', _getArchivedTransactions)
+    ..post('/api/capital/unarchive/<id>', _unarchiveTransaction)
+    ..delete('/api/capital/archived/<id>', _deleteArchivedTransaction)
     // Settlement routes - للموظفين
     ..get('/api/settlements/employee-stats', (request) => settle.getEmployeeSettlementStats(request, db!))
     ..post('/api/settlements/request', (request) => settle.createSettlementRequest(request, db!))
@@ -275,7 +316,12 @@ void main() async {
     ..post('/api/settlements/manager/reject/<id>', (request, id) => settle.rejectSettlement(request, db!, id))
     ..delete('/api/settlements/manager/<id>', (request, id) => settle.deleteSettlement(request, db!, id))
     ..put('/api/settlements/manager/commission/<userId>', (request, userId) => settle.updateEmployeeCommission(request, db!, userId))
-    ..get('/api/settlements/manager/commission/<userId>', (request, userId) => settle.getEmployeeCommission(request, db!, userId));
+    ..get('/api/settlements/manager/commission/<userId>', (request, userId) => settle.getEmployeeCommission(request, db!, userId))
+    // Payment Methods routes
+    ..get('/api/payment-methods', payment.getAllPaymentMethods)
+    ..post('/api/payment-methods', payment.addPaymentMethod)
+    ..put('/api/payment-methods/<id>', payment.updatePaymentMethod)
+    ..delete('/api/payment-methods/<id>', payment.deletePaymentMethod);
 
   final handler = const Pipeline()
       .addMiddleware(_corsMiddleware())
@@ -739,23 +785,24 @@ Future<Response> _getCapitalInfo(Request request) async {
           headers: {'Content-Type': 'application/json'});
     }
 
-    // حساب رأس المال الحالي
+    // حساب رأس المال الحالي (استثناء المعاملات المؤرشفة)
     final deposits = db!.select(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ?',
+      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ? AND (is_archived IS NULL OR is_archived = 0)',
       ['deposit']
     ).first['total'] as num;
 
     final withdrawals = db!.select(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ?',
+      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ? AND (is_archived IS NULL OR is_archived = 0)',
       ['withdraw']
     ).first['total'] as num;
 
     final currentCapital = deposits - withdrawals;
 
-    // جلب آخر 50 عملية
+    // جلب آخر 50 عملية (استثناء المعاملات المؤرشفة)
     final transactions = db!.select('''
-      SELECT type, amount, description, created_by, created_at
+      SELECT id, type, amount, description, created_by, created_at
       FROM capital_transactions
+      WHERE is_archived IS NULL OR is_archived = 0
       ORDER BY created_at DESC
       LIMIT 50
     ''');
@@ -768,6 +815,7 @@ Future<Response> _getCapitalInfo(Request request) async {
             'totalDeposits': deposits,
             'totalWithdrawals': withdrawals,
             'transactions': transactions.map((row) => {
+              'id': row['id'],
               'type': row['type'],
               'amount': row['amount'],
               'description': row['description'],
@@ -926,6 +974,191 @@ Future<Response> _withdrawCapital(Request request) async {
   }
 }
 
+// دالة خصم تكلفة طلب - يمكن لجميع المستخدمين استخدامها
+Future<Response> _withdrawForOrder(Request request) async {
+  print('🔵 _withdrawForOrder: تم استدعاء الدالة');
+  try {
+    final authHeader = request.headers['authorization'];
+    
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      print('❌ _withdrawForOrder: لا يوجد Authorization header');
+      return Response(401,
+          body: jsonEncode({'success': false, 'message': 'غير مصرح'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final token = authHeader.substring(7);
+    late JWT jwt;
+
+    try {
+      jwt = JWT.verify(token, SecretKey(secretKey));
+    } catch (e) {
+      print('❌ _withdrawForOrder: فشل التحقق من Token - $e');
+      return Response(403,
+          body: jsonEncode({'success': false, 'message': 'الجلسة منتهية'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final requestBody = await request.readAsString();
+    print('🔵 _withdrawForOrder: Body: $requestBody');
+    final data = jsonDecode(requestBody);
+    final amount = data['amount'];
+    final orderId = data['order_id'];
+    final productName = data['product_name'];
+    final customerName = data['customer_name'];
+    final customerPhone = data['customer_phone'];
+    final sellPrice = data['sell_price'];
+    
+    print('🔵 _withdrawForOrder: المبلغ=$amount، الطلب=$orderId، المنتج=$productName');
+
+    if (amount == null || amount <= 0) {
+      return Response.badRequest(
+          body: jsonEncode({'success': false, 'message': 'المبلغ غير صالح'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    // التحقق من توفر رأس المال
+    final deposits = db!.select(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ?',
+      ['deposit']
+    ).first['total'] as num;
+
+    final withdrawals = db!.select(
+      'SELECT COALESCE(SUM(amount), 0) as total FROM capital_transactions WHERE type = ?',
+      ['withdraw']
+    ).first['total'] as num;
+
+    final currentCapital = deposits - withdrawals;
+
+    if (amount > currentCapital) {
+      return Response.badRequest(
+          body: jsonEncode({'success': false, 'message': 'رأس المال غير كافٍ للسحب'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final now = DateTime.now().toIso8601String();
+    final username = jwt.payload['username'] ?? 'unknown';
+    final description = 'تكلفة طلب: $productName - $customerName';
+    
+    db!.execute('''
+      INSERT INTO capital_transactions (
+        type, amount, description, created_by, created_at,
+        order_id, product_name, customer_name, customer_phone, sell_price
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', ['withdraw', amount, description, username, now, orderId, productName, customerName, customerPhone ?? '', sellPrice]);
+
+    print('✅ تم خصم تكلفة طلب: $amount دينار - $productName بواسطة $username');
+
+    return Response.ok(
+        jsonEncode({'success': true, 'message': 'تم خصم التكلفة من رأس المال'}),
+        headers: {'Content-Type': 'application/json'});
+  } catch (e) {
+    print('❌ خطأ في خصم تكلفة الطلب: $e');
+    return Response.internalServerError(
+        body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+        headers: {'Content-Type': 'application/json'});
+  }
+}
+
+// دالة الحصول على تفاصيل معاملة واحدة
+Future<Response> _getTransactionDetails(Request request, String id) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response(401,
+          body: jsonEncode({'success': false, 'message': 'غير مصرح'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final token = authHeader.substring(7);
+    try {
+      JWT.verify(token, SecretKey(secretKey));
+    } catch (e) {
+      return Response(403,
+          body: jsonEncode({'success': false, 'message': 'الجلسة منتهية'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final transaction = db!.select(
+      'SELECT * FROM capital_transactions WHERE id = ?',
+      [int.parse(id)]
+    );
+
+    if (transaction.isEmpty) {
+      return Response.notFound(
+          jsonEncode({'success': false, 'message': 'المعاملة غير موجودة'}));
+    }
+
+    final row = transaction.first;
+    return Response.ok(
+        jsonEncode({
+          'success': true,
+          'transaction': {
+            'id': row['id'],
+            'type': row['type'],
+            'amount': row['amount'],
+            'description': row['description'],
+            'created_by': row['created_by'],
+            'created_at': row['created_at'],
+            'order_id': row['order_id'],
+            'product_name': row['product_name'],
+            'customer_name': row['customer_name'],
+            'customer_phone': row['customer_phone'],
+            'sell_price': row['sell_price'],
+          }
+        }),
+        headers: {'Content-Type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(
+        body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+        headers: {'Content-Type': 'application/json'});
+  }
+}
+
+// دالة حذف معاملة واحدة
+Future<Response> _deleteTransaction(Request request, String id) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response(401,
+          body: jsonEncode({'success': false, 'message': 'غير مصرح'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    final token = authHeader.substring(7);
+    late JWT jwt;
+
+    try {
+      jwt = JWT.verify(token, SecretKey(secretKey));
+    } catch (e) {
+      return Response(403,
+          body: jsonEncode({'success': false, 'message': 'الجلسة منتهية'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    // التحقق من أن المستخدم مدير
+    if (jwt.payload['role'] != 'admin') {
+      return Response(403,
+          body: jsonEncode({'success': false, 'message': 'ليس لديك صلاحية'}),
+          headers: {'Content-Type': 'application/json'});
+    }
+
+    db!.execute('DELETE FROM capital_transactions WHERE id = ?', [int.parse(id)]);
+
+    print('✅ تم حذف المعاملة رقم: $id');
+
+    return Response.ok(
+        jsonEncode({'success': true, 'message': 'تم حذف المعاملة بنجاح'}),
+        headers: {'Content-Type': 'application/json'});
+  } catch (e) {
+    return Response.internalServerError(
+        body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+        headers: {'Content-Type': 'application/json'});
+  }
+}
+
 Future<Response> _deleteTransactionsByDate(Request request, String date) async {
   try {
     // التحقق من صحة التوكن
@@ -984,5 +1217,249 @@ Future<Response> _deleteTransactionsByDate(Request request, String date) async {
     return Response.internalServerError(
         body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
         headers: {'Content-Type': 'application/json'});
+  }
+}
+
+// ================== وظائف أرشفة السجل المالي ==================
+
+/// أرشفة معاملة واحدة
+Future<Response> _archiveTransaction(Request request, String id) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response.forbidden(jsonEncode({'success': false, 'message': 'غير مصرح'}));
+    }
+
+    final token = authHeader.substring(7);
+    final jwt = JWT.verify(token, SecretKey(secretKey));
+    final username = jwt.payload['username'] ?? 'admin';
+
+    final transactionId = int.parse(id);
+
+    // التحقق من وجود المعاملة
+    final transaction = db!.select(
+      'SELECT * FROM capital_transactions WHERE id = ? AND (is_archived IS NULL OR is_archived = 0)',
+      [transactionId],
+    );
+
+    if (transaction.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'success': false, 'message': 'المعاملة غير موجودة أو مؤرشفة بالفعل'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    // أرشفة المعاملة
+    db!.execute('''
+      UPDATE capital_transactions 
+      SET is_archived = 1, archived_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    ''', [transactionId]);
+
+    print('📦 تم أرشفة المعاملة #$transactionId بواسطة $username');
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'تم أرشفة المعاملة بنجاح'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في أرشفة المعاملة: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+/// أرشفة جميع المعاملات
+Future<Response> _archiveAllTransactions(Request request) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response.forbidden(jsonEncode({'success': false, 'message': 'غير مصرح'}));
+    }
+
+    final token = authHeader.substring(7);
+    final jwt = JWT.verify(token, SecretKey(secretKey));
+    final username = jwt.payload['username'] ?? 'admin';
+
+    // عد المعاملات غير المؤرشفة
+    final countResult = db!.select(
+      'SELECT COUNT(*) as count FROM capital_transactions WHERE is_archived IS NULL OR is_archived = 0',
+    );
+
+    final count = countResult.first['count'] as int;
+
+    if (count == 0) {
+      return Response.ok(
+        jsonEncode({'success': true, 'message': 'لا توجد معاملات لأرشفتها', 'archivedCount': 0}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    // أرشفة جميع المعاملات
+    db!.execute('''
+      UPDATE capital_transactions 
+      SET is_archived = 1, archived_at = CURRENT_TIMESTAMP 
+      WHERE is_archived IS NULL OR is_archived = 0
+    ''');
+
+    print('📦 تم أرشفة $count معاملة بواسطة $username');
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'تم أرشفة جميع المعاملات بنجاح', 'archivedCount': count}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في أرشفة المعاملات: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+/// الحصول على المعاملات المؤرشفة
+Future<Response> _getArchivedTransactions(Request request) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response.forbidden(jsonEncode({'success': false, 'message': 'غير مصرح'}));
+    }
+
+    // الحصول على جميع المعاملات المؤرشفة
+    final transactions = db!.select('''
+      SELECT id, type, amount, description, created_by, created_at, 
+             order_id, product_name, customer_name, customer_phone, sell_price,
+             archived_at
+      FROM capital_transactions 
+      WHERE is_archived = 1
+      ORDER BY archived_at DESC
+    ''');
+
+    final List<Map<String, dynamic>> transactionsList = transactions.map((row) {
+      return {
+        'id': row['id'],
+        'type': row['type'],
+        'amount': row['amount'],
+        'description': row['description'],
+        'created_by': row['created_by'],
+        'created_at': row['created_at'],
+        'archived_at': row['archived_at'],
+        'order_id': row['order_id'],
+        'product_name': row['product_name'],
+        'customer_name': row['customer_name'],
+        'customer_phone': row['customer_phone'],
+        'sell_price': row['sell_price'],
+      };
+    }).toList();
+
+    return Response.ok(
+      jsonEncode({
+        'success': true,
+        'transactions': transactionsList,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في جلب المعاملات المؤرشفة: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+/// استرجاع معاملة من الأرشيف
+Future<Response> _unarchiveTransaction(Request request, String id) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response.forbidden(jsonEncode({'success': false, 'message': 'غير مصرح'}));
+    }
+
+    final token = authHeader.substring(7);
+    final jwt = JWT.verify(token, SecretKey(secretKey));
+    final username = jwt.payload['username'] ?? 'admin';
+
+    final transactionId = int.parse(id);
+
+    // التحقق من وجود المعاملة في الأرشيف
+    final transaction = db!.select(
+      'SELECT * FROM capital_transactions WHERE id = ? AND is_archived = 1',
+      [transactionId],
+    );
+
+    if (transaction.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'success': false, 'message': 'المعاملة غير موجودة في الأرشيف'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    // استرجاع المعاملة
+    db!.execute('''
+      UPDATE capital_transactions 
+      SET is_archived = 0, archived_at = NULL 
+      WHERE id = ?
+    ''', [transactionId]);
+
+    print('📤 تم استرجاع المعاملة #$transactionId من الأرشيف بواسطة $username');
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'تم استرجاع المعاملة بنجاح'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في استرجاع المعاملة: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+}
+
+/// حذف معاملة مؤرشفة نهائياً
+Future<Response> _deleteArchivedTransaction(Request request, String id) async {
+  try {
+    final authHeader = request.headers['authorization'];
+    if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+      return Response.forbidden(jsonEncode({'success': false, 'message': 'غير مصرح'}));
+    }
+
+    final token = authHeader.substring(7);
+    final jwt = JWT.verify(token, SecretKey(secretKey));
+    final username = jwt.payload['username'] ?? 'admin';
+
+    final transactionId = int.parse(id);
+
+    // التحقق من وجود المعاملة في الأرشيف
+    final transaction = db!.select(
+      'SELECT * FROM capital_transactions WHERE id = ? AND is_archived = 1',
+      [transactionId],
+    );
+
+    if (transaction.isEmpty) {
+      return Response.notFound(
+        jsonEncode({'success': false, 'message': 'المعاملة غير موجودة في الأرشيف'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+
+    // حذف المعاملة نهائياً
+    db!.execute('DELETE FROM capital_transactions WHERE id = ?', [transactionId]);
+
+    print('🗑️ تم حذف المعاملة #$transactionId نهائياً من الأرشيف بواسطة $username');
+
+    return Response.ok(
+      jsonEncode({'success': true, 'message': 'تم حذف المعاملة نهائياً'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  } catch (e) {
+    print('❌ خطأ في حذف المعاملة: $e');
+    return Response.internalServerError(
+      body: jsonEncode({'success': false, 'message': 'خطأ في الخادم: $e'}),
+      headers: {'Content-Type': 'application/json'},
+    );
   }
 }

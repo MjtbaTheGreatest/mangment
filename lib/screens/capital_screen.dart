@@ -5,6 +5,7 @@ import '../styles/app_text_styles.dart';
 import '../services/api_service.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:fl_chart/fl_chart.dart';
+import 'capital_archive_screen.dart';
 
 // RouteObserver للكشف عن حالة الصفحة - متاح عالمياً
 final RouteObserver<PageRoute> capitalRouteObserver = RouteObserver<PageRoute>();
@@ -568,6 +569,31 @@ class _CapitalScreenState extends State<CapitalScreen> with TickerProviderStateM
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            // زر الأرشيف
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _navigateToArchive,
+                icon: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.inventory_2, size: 20),
+                ),
+                label: Text('أرشيف السجل المالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 4,
+                  shadowColor: Colors.amber.withOpacity(0.5),
+                ),
+              ),
+            ),
           ],
         ),
     );
@@ -954,11 +980,25 @@ class _CapitalScreenState extends State<CapitalScreen> with TickerProviderStateM
               children: [
                 Icon(Icons.history, color: AppColors.primaryGold, size: 24),
                 const SizedBox(width: 12),
-                Text(
-                  'سجل العمليات اليومي',
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    color: AppColors.textGold,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    'سجل العمليات اليومي',
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      color: AppColors.textGold,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _archiveAllTransactions,
+                  icon: Icon(Icons.archive, size: 18),
+                  label: Text('أرشفة الكل'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 2,
                   ),
                 ),
               ],
@@ -1022,24 +1062,569 @@ class _CapitalScreenState extends State<CapitalScreen> with TickerProviderStateM
           final type = (t['type'] ?? '').toString();
           final isDeposit = type.toLowerCase() == 'deposit' || type == 'إضافة';
           final displayType = isDeposit ? 'إضافة' : 'سحب';
+          final description = (t['description'] ?? '').toString();
           
-          return ListTile(
-            leading: Icon(
-              isDeposit ? Icons.add_circle : Icons.remove_circle,
-              color: isDeposit ? Colors.green : Colors.red,
-            ),
-            title: Text(displayType, style: TextStyle(color: AppColors.textGold)),
-            trailing: Text(
-              '${_formatCurrency(amount)} د.ع',
-              style: TextStyle(
-                color: isDeposit ? Colors.green : Colors.red,
-                fontWeight: FontWeight.bold,
+          // التحقق من وجود ID بطريقة آمنة
+          final dynamic idValue = t['id'];
+          final int? transactionId = idValue != null ? (idValue is int ? idValue : int.tryParse(idValue.toString())) : null;
+          
+          print('🔍 Transaction ID: $transactionId (من نوع: ${idValue.runtimeType})'); // للتشخيص
+          
+          return MouseRegion(
+            cursor: transactionId != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            child: InkWell(
+              onTap: transactionId != null ? () {
+                print('✅ تم الضغط على المعاملة رقم: $transactionId');
+                _showTransactionDetailsDialog(t);
+              } : null,
+              enableFeedback: transactionId != null,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.glassBlack.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDeposit ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+                ),
               ),
+              child: Row(
+                children: [
+                  Icon(
+                    isDeposit ? Icons.add_circle : Icons.remove_circle,
+                    color: isDeposit ? Colors.green : Colors.red,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayType, 
+                          style: TextStyle(
+                            color: AppColors.textGold, 
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        if (description.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            description,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${_formatCurrency(amount)} د.ع',
+                    style: TextStyle(
+                      color: isDeposit ? Colors.green : Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (transactionId != null) ...[
+                    IconButton(
+                      icon: Icon(Icons.archive, color: Colors.amber.shade600, size: 18),
+                      onPressed: () => _showArchiveSingleTransactionDialog(transactionId),
+                      tooltip: 'أرشفة هذه العملية',
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 18),
+                      onPressed: () => _showDeleteSingleTransactionDialog(transactionId),
+                      tooltip: 'حذف هذه العملية',
+                    ),
+                  ]
+                  else
+                    const SizedBox(width: 40), // مساحة فارغة للمعاملات القديمة
+                ],
+              ),
+            ),
             ),
           );
         }).toList(),
       ),
     );
+  }
+
+  // عرض نافذة تفاصيل المعاملة
+  Future<void> _showTransactionDetailsDialog(Map<String, dynamic> transaction) async {
+    print('🔵 _showTransactionDetailsDialog: بدء عرض التفاصيل');
+    print('📦 Transaction data: $transaction');
+    
+    final dynamic transactionIdDynamic = transaction['id'];
+    
+    // التحقق من وجود ID
+    if (transactionIdDynamic == null) {
+      print('❌ معرف المعاملة null');
+      _showMessage('معرف المعاملة غير موجود', isError: true);
+      return;
+    }
+    
+    // تحويل ID إلى int بشكل آمن
+    int transactionId;
+    if (transactionIdDynamic is int) {
+      transactionId = transactionIdDynamic;
+    } else if (transactionIdDynamic is String) {
+      transactionId = int.tryParse(transactionIdDynamic) ?? 0;
+      if (transactionId == 0) {
+        print('❌ فشل تحويل ID من String: $transactionIdDynamic');
+        _showMessage('معرف المعاملة غير صالح', isError: true);
+        return;
+      }
+    } else {
+      try {
+        transactionId = int.parse(transactionIdDynamic.toString());
+      } catch (e) {
+        print('❌ فشل تحويل ID: $e');
+        _showMessage('معرف المعاملة غير صالح', isError: true);
+        return;
+      }
+    }
+    
+    print('✅ Transaction ID: $transactionId');
+    
+    // جلب التفاصيل الكاملة من السيرفر
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: CircularProgressIndicator(color: AppColors.primaryGold),
+      ),
+    );
+    
+    final result = await ApiService.getTransactionDetails(transactionId);
+    
+    if (!mounted) return;
+    Navigator.of(context).pop(); // إغلاق مؤشر التحميل
+    
+    if (result['success'] != true) {
+      _showMessage('خطأ في جلب التفاصيل', isError: true);
+      return;
+    }
+    
+    final details = result['transaction'];
+    final amount = ((details['amount'] ?? 0) as num).toDouble();
+    final type = (details['type'] ?? '').toString();
+    final isDeposit = type.toLowerCase() == 'deposit' || type == 'إضافة';
+    final description = (details['description'] ?? '').toString();
+    final createdBy = (details['created_by'] ?? '').toString();
+    final createdAt = details['created_at'];
+    
+    // تفاصيل الطلب إذا كانت موجودة
+    final orderId = details['order_id'];
+    final productName = details['product_name'];
+    final customerName = details['customer_name'];
+    final customerPhone = details['customer_phone'];
+    final sellPrice = ((details['sell_price'] ?? 0) as num).toDouble();
+    
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 500),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+                colors: [
+                  AppColors.charcoal,
+                  AppColors.pureBlack,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDeposit ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isDeposit ? Colors.green : Colors.red).withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDeposit 
+                        ? [Colors.green.shade800, Colors.green.shade900]
+                        : [Colors.red.shade800, Colors.red.shade900],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(22),
+                      topRight: Radius.circular(22),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          isDeposit ? Icons.trending_up : Icons.trending_down,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isDeposit ? 'إضافة رأس مال' : 'سحب من رأس المال',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_formatCurrency(amount)} د.ع',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // معلومات عامة
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.glassBlack.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.textSecondary.withOpacity(0.2),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    color: AppColors.primaryGold,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'معلومات العملية',
+                                    style: TextStyle(
+                                      color: AppColors.textGold,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildDetailRow('الوصف', description, Icons.description),
+                              const SizedBox(height: 12),
+                              _buildDetailRow('المستخدم', createdBy, Icons.person),
+                              const SizedBox(height: 12),
+                              _buildDetailRow('التوقيت', _formatDateTime(createdAt), Icons.access_time),
+                            ],
+                          ),
+                        ),
+                        
+                        // تفاصيل الطلب إذا كانت موجودة
+                        if (orderId != null && productName != null) ...[
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.glassBlack.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.primaryGold.withOpacity(0.3),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.shopping_bag,
+                                      color: AppColors.primaryGold,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'تفاصيل الطلب',
+                                      style: TextStyle(
+                                        color: AppColors.textGold,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                _buildDetailRow('رقم الطلب', '#$orderId', Icons.tag),
+                                const SizedBox(height: 12),
+                                _buildDetailRow('اسم المنتج', productName, Icons.inventory_2),
+                                const SizedBox(height: 12),
+                                _buildDetailRow('اسم الزبون', customerName ?? '-', Icons.person_outline),
+                                if (customerPhone != null && customerPhone.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow('رقم الهاتف', customerPhone, Icons.phone),
+                                ],
+                                if (sellPrice > 0) ...[
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow(
+                                    'سعر البيع', 
+                                    '${_formatCurrency(sellPrice)} د.ع', 
+                                    Icons.payments,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow(
+                                    'الربح', 
+                                    '${_formatCurrency(sellPrice - amount)} د.ع', 
+                                    Icons.trending_up,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                
+                // Actions
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: AppColors.glassBlack,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: AppColors.textSecondary.withOpacity(0.3)),
+                            ),
+                          ),
+                          child: Text(
+                            'إغلاق',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _showDeleteSingleTransactionDialog(transactionId);
+                          },
+                          icon: const Icon(Icons.delete, size: 20),
+                          label: const Text('حذف العملية'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildDetailRow(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.primaryGold.withOpacity(0.7), size: 18),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  String _formatDateTime(String? dateTimeStr) {
+    if (dateTimeStr == null) return '-';
+    try {
+      final dt = DateTime.parse(dateTimeStr);
+      final arabicMonths = [
+        'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+      ];
+      final arabicDays = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      
+      final monthName = arabicMonths[dt.month - 1];
+      final dayName = arabicDays[dt.weekday % 7];
+      
+      // تحويل الساعة إلى نظام 12 ساعة
+      int hour = dt.hour;
+      String period = 'صباحاً';
+      
+      if (hour == 0) {
+        hour = 12; // منتصف الليل
+      } else if (hour == 12) {
+        period = 'ظهراً'; // الظهر
+      } else if (hour > 12) {
+        hour = hour - 12;
+        period = 'مساءً';
+      }
+      
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final second = dt.second.toString().padLeft(2, '0');
+      
+      return '$dayName، ${dt.day} $monthName ${dt.year}\n⏰ $hour:$minute:$second $period';
+    } catch (e) {
+      return dateTimeStr;
+    }
+  }
+  
+  // حذف معاملة واحدة
+  Future<void> _showDeleteSingleTransactionDialog(int transactionId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: AppColors.charcoal,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'تأكيد الحذف',
+                style: TextStyle(color: AppColors.textGold, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'هل أنت متأكد من حذف هذه المعاملة؟',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '⚠️ هذا الإجراء لا يمكن التراجع عنه',
+                style: TextStyle(color: Colors.orange.shade300, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('حذف'),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    if (confirmed == true) {
+      await _deleteSingleTransaction(transactionId);
+    }
+  }
+  
+  Future<void> _deleteSingleTransaction(int transactionId) async {
+    try {
+      final result = await ApiService.deleteTransaction(transactionId);
+      
+      if (result['success'] == true) {
+        _showMessage('✅ تم حذف المعاملة بنجاح');
+        await _loadCapitalData();
+      } else {
+        _showMessage(result['message'] ?? 'حدث خطأ أثناء الحذف', isError: true);
+      }
+    } catch (e) {
+      _showMessage('حدث خطأ أثناء الحذف', isError: true);
+    }
   }
 
   Widget _buildDrawer() {
@@ -1121,5 +1706,209 @@ class _CapitalScreenState extends State<CapitalScreen> with TickerProviderStateM
         ],
       ),
     );
+  }
+
+  // ================== وظائف الأرشفة ==================
+
+  // الانتقال لصفحة الأرشيف
+  void _navigateToArchive() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CapitalArchiveScreen()),
+    );
+    // إعادة تحميل البيانات بعد العودة من صفحة الأرشيف
+    _loadCapitalData();
+  }
+
+  // أرشفة معاملة واحدة
+  void _showArchiveSingleTransactionDialog(int transactionId) {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: AppColors.charcoal,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.archive, color: Colors.amber.shade600, size: 28),
+              const SizedBox(width: 12),
+              Text('أرشفة العملية', style: TextStyle(color: AppColors.textGold, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'هل تريد أرشفة هذه العملية؟\nيمكنك استرجاعها لاحقاً من صفحة الأرشيف.',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _archiveSingleTransaction(transactionId);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('أرشفة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _archiveSingleTransaction(int transactionId) async {
+    try {
+      final result = await ApiService.archiveCapitalTransaction(transactionId);
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم أرشفة العملية بنجاح', style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        _loadCapitalData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'فشل الأرشفة', style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في الاتصال', style: const TextStyle(color: Colors.white)),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  // أرشفة جميع المعاملات
+  void _archiveAllTransactions() {
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: AppColors.charcoal,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.archive, color: Colors.amber.shade600, size: 28),
+              const SizedBox(width: 12),
+              Text('أرشفة جميع العمليات', style: TextStyle(color: AppColors.textGold, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'هل تريد أرشفة جميع العمليات الحالية؟',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.amber.shade600, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'يمكنك استرجاعها لاحقاً من صفحة الأرشيف',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('إلغاء', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _performArchiveAll();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.shade700,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('أرشفة الكل'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _performArchiveAll() async {
+    try {
+      final result = await ApiService.archiveAllCapitalTransactions();
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true) {
+        final count = result['archivedCount'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم أرشفة $count عملية بنجاح', style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        _loadCapitalData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'فشل الأرشفة', style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في الاتصال', style: const TextStyle(color: Colors.white)),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 }

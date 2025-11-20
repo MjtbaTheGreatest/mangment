@@ -72,7 +72,7 @@ class UpdateService {
     }
   }
 
-  /// تحميل التحديث
+  /// تحميل التحديث (ZIP أو EXE)
   static Future<Map<String, dynamic>> downloadUpdate(
     String downloadUrl,
     String version,
@@ -88,9 +88,11 @@ class UpdateService {
         await updatesDir.create(recursive: true);
       }
       
-      // تحديد اسم الملف بناءً على رابط التحميل
+      // تحديد نوع الملف (ZIP للنسخة الكاملة، EXE للمثبت)
       final urlFileName = downloadUrl.split('/').last;
-      final fileName = urlFileName.isNotEmpty ? urlFileName : 'my_system_setup_v$version.exe';
+      final isZip = urlFileName.toLowerCase().endsWith('.zip');
+      final fileName = urlFileName.isNotEmpty ? urlFileName : 
+                      (isZip ? 'my_system_v$version.zip' : 'my_system_setup_v$version.exe');
       final filePath = '${updatesDir.path}\\$fileName';
       final file = File(filePath);
       
@@ -124,6 +126,7 @@ class UpdateService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_downloadedUpdatePathKey, filePath);
         await prefs.setString(_downloadedUpdateVersionKey, version);
+        await prefs.setBool('_isZipUpdate', isZip);
         
         print('✅ تم تحميل التحديث إلى: $filePath');
         
@@ -131,6 +134,7 @@ class UpdateService {
           'success': true,
           'filePath': filePath,
           'version': version,
+          'isZip': isZip,
         };
       } else {
         return {
@@ -170,12 +174,22 @@ class UpdateService {
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
       
-      if (compareVersions(version, currentVersion) > 0) {
+      final comparison = compareVersions(version, currentVersion);
+      
+      if (comparison > 0) {
+        // التحديث المحمل أحدث من النسخة الحالية
         return {
           'hasDownloadedUpdate': true,
           'filePath': filePath,
           'version': version,
         };
+      } else if (comparison <= 0) {
+        // التحديث المحمل نفس النسخة أو أقدم - حذفه تلقائياً
+        print('🗑️ التحديث المحمل ($version) نفس النسخة الحالية أو أقدم ($currentVersion). جاري الحذف...');
+        await file.delete();
+        await prefs.remove(_downloadedUpdatePathKey);
+        await prefs.remove(_downloadedUpdateVersionKey);
+        return {'hasDownloadedUpdate': false};
       }
       
       return {'hasDownloadedUpdate': false};
@@ -185,7 +199,7 @@ class UpdateService {
     }
   }
 
-  /// تثبيت التحديث وإعادة تشغيل البرنامج
+  /// تثبيت التحديث - تشغيل المثبت تلقائياً
   static Future<Map<String, dynamic>> installUpdate(String filePath) async {
     try {
       print('🔄 بدء تثبيت التحديث: $filePath');
@@ -199,52 +213,26 @@ class UpdateService {
       }
       
       if (Platform.isWindows) {
-        // الحصول على مسار البرنامج الحالي
-        final currentExePath = Platform.resolvedExecutable;
-        final currentDir = File(currentExePath).parent.path;
+        // تشغيل المثبت بوضع صامت (/SILENT) أو بواجهة (/VERYSILENT لإخفاء كل شيء)
+        // نستخدم /SILENT لإظهار progress فقط دون أي تفاعل
+        print('🚀 تشغيل المثبت: $filePath');
         
-        print('📂 المسار الحالي: $currentExePath');
-        print('📁 المجلد الحالي: $currentDir');
-        
-        // إنشاء سكريبت PowerShell للتحديث
-        final scriptPath = '${updateFile.parent.path}\\update_script.ps1';
-        final script = '''
-# انتظار إغلاق البرنامج
-Start-Sleep -Seconds 2
-
-# نسخ الملف الجديد مكان القديم
-try {
-    Copy-Item -Path "$filePath" -Destination "$currentExePath" -Force
-    Write-Host "تم تحديث البرنامج بنجاح"
-    
-    # تشغيل البرنامج الجديد
-    Start-Process "$currentExePath"
-} catch {
-    Write-Host "خطأ: \$_"
-    Read-Host "اضغط Enter للإغلاق"
-}
-
-# حذف السكريبت نفسه
-Remove-Item "\$PSCommandPath" -Force
-''';
-        
-        final scriptFile = File(scriptPath);
-        await scriptFile.writeAsString(script);
-        
-        // تشغيل السكريبت
         await Process.start(
-          'powershell.exe',
-          [
-            '-ExecutionPolicy', 'Bypass',
-            '-WindowStyle', 'Hidden',
-            '-File', scriptPath,
-          ],
+          filePath,
+          ['/SILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
           mode: ProcessStartMode.detached,
         );
         
-        // إغلاق التطبيق الحالي
-        await Future.delayed(const Duration(milliseconds: 500));
-        exit(0);
+        print('✅ تم تشغيل المثبت. سيتم إغلاق البرنامج الحالي...');
+        
+        // الانتظار قليلاً لضمان بدء المثبت
+        await Future.delayed(const Duration(seconds: 1));
+        
+        return {
+          'success': true,
+          'message': 'جاري التثبيت... سيتم إعادة تشغيل البرنامج تلقائياً.',
+          'shouldExit': true, // إشارة لإغلاق البرنامج
+        };
       }
       
       return {'success': true};
@@ -258,22 +246,23 @@ Remove-Item "\$PSCommandPath" -Force
   }
 
   /// حذف التحديث المحمل
-  static Future<void> clearDownloadedUpdate() async {
+  static Future<void> clearDownloadedUpdate({bool deleteFile = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filePath = prefs.getString(_downloadedUpdatePathKey);
       
-      if (filePath != null) {
+      if (filePath != null && deleteFile) {
         final file = File(filePath);
         if (await file.exists()) {
           await file.delete();
+          print('🗑️ تم حذف ملف التحديث');
         }
       }
       
       await prefs.remove(_downloadedUpdatePathKey);
       await prefs.remove(_downloadedUpdateVersionKey);
       
-      print('🗑️ تم حذف التحديث المحمل');
+      print('🗑️ تم مسح بيانات التحديث من الذاكرة');
     } catch (e) {
       print('❌ خطأ في حذف التحديث: $e');
     }
