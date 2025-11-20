@@ -452,19 +452,52 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            Row(
               children: [
-                Text(
-                  'مرحباً، ${_name ?? _username ?? 'مستخدم'}',
-                  style: AppTextStyles.headlineMedium.copyWith(
-                    color: AppColors.textGold,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'مرحباً، ${_name ?? _username ?? 'مستخدم'}',
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        color: AppColors.textGold,
+                      ),
+                    ),
+                    Text(
+                      _role == 'admin' ? 'مدير النظام' : 'موظف',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  _role == 'admin' ? 'مدير النظام' : 'موظف',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      _role == 'admin' ? '/admin-settings' : '/settings',
+                    );
+                  },
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: AppColors.goldGradient,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryGold.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.settings,
+                      color: AppColors.pureBlack,
+                      size: 24,
+                    ),
                   ),
                 ),
               ],

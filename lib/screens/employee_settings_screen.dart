@@ -36,25 +36,22 @@ class _EmployeeSettingsScreenState extends State<EmployeeSettingsScreen> {
     setState(() => _isCheckingUpdate = true);
 
     try {
-      final hasUpdate = await UpdateService.checkForUpdates();
+      final updateInfo = await UpdateService.checkForUpdate();
       
       if (!mounted) return;
 
-      if (hasUpdate) {
-        final updateInfo = await UpdateService.getLatestVersion();
-        if (updateInfo != null && mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => UpdateDialog(
-              currentVersion: _currentVersion,
-              newVersion: updateInfo['version'] ?? '',
-              changelog: updateInfo['changelog'] ?? '',
-              downloadUrl: updateInfo['download_url'] ?? '',
-              mandatory: updateInfo['mandatory'] ?? false,
-            ),
-          );
-        }
+      if (updateInfo['hasUpdate'] == true) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => UpdateDialog(
+            currentVersion: _currentVersion,
+            latestVersion: updateInfo['latestVersion'] ?? '',
+            changelog: updateInfo['changelog'] ?? '',
+            downloadUrl: updateInfo['downloadUrl'] ?? '',
+            isMandatory: updateInfo['mandatory'] ?? false,
+          ),
+        );
       } else {
         _showMessage('أنت تستخدم أحدث إصدار', isError: false);
       }
