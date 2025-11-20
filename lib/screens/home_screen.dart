@@ -444,13 +444,43 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Builder(
-              builder: (context) => IconButton(
-                icon: Icon(Icons.menu, color: AppColors.primaryGold, size: 28),
-                onPressed: () {
-                  Scaffold.of(context).openDrawer();
-                },
-              ),
+            Row(
+              children: [
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: Icon(Icons.menu, color: AppColors.primaryGold, size: 28),
+                    onPressed: () {
+                      Scaffold.of(context).openDrawer();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // زر الإعدادات في الـ Navbar
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      _role == 'admin' ? '/admin-settings' : '/settings',
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.primaryGold.withOpacity(0.2),
+                      border: Border.all(
+                        color: AppColors.primaryGold.withOpacity(0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.settings,
+                      color: AppColors.primaryGold,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
             Row(
               children: [
@@ -494,7 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     child: Icon(
-                      Icons.settings,
+                      Icons.person,
                       color: AppColors.pureBlack,
                       size: 24,
                     ),
