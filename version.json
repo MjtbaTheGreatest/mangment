@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.6",
   "build_number": 2,
-  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.0/TaifManagement-Setup.exe",
+  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.6/TaifManagement-Setup.exe",
   "changelog": "🎉 إصدار 1.2.0\n\n✨ ميزات جديدة:\n• نظام إدارة الموظفين الكامل مع الإحصائيات\n• إدارة طرق الدفع الديناميكية\n• نظام الإحصائيات المتقدم مع التصدير\n• تصدير التقارير (PDF، Excel، HTML)\n• تحليل سنوي شامل\n\n🔧 تحسينات:\n• إصلاح Authentication للـ API\n• تحسين الأداء والاستقرار\n• واجهة محسنة",
   "mandatory": false,
   "min_version": "1.0.0",
