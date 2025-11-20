@@ -1151,10 +1151,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.pop(context);
 
     if (result['success'] != true) {
+      // عرض رسالة خطأ مفصلة
+      final errorMessage = result['error'] ?? 'حدث خطأ أثناء تثبيت التحديث';
       _showErrorDialog(
         'فشل التثبيت',
-        result['error'] ?? 'حدث خطأ أثناء تثبيت التحديث',
+        '$errorMessage\n\nسيتم حذف الملف التالف. يرجى المحاولة مرة أخرى.',
       );
+      
+      // حذف معلومات التحديث من الذاكرة
+      await UpdateService.clearDownloadedUpdate(deleteFile: true);
     } else if (result['shouldExit'] == true) {
       // مسح معلومات التحديث من الذاكرة فقط (بدون حذف الملف)
       // لأن المثبت لازم يشتغل من الملف

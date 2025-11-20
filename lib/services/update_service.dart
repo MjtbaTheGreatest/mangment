@@ -46,6 +46,12 @@ class UpdateService {
         print('📦 آخر إصدار: $latestVersion');
         print('📥 رابط التحميل: $downloadUrl');
 
+        // التحقق من وجود رابط تحميل
+        if (downloadUrl == null || downloadUrl.isEmpty) {
+          print('❌ لا يوجد ملف تحديث متاح في الإصدار');
+          return {'hasUpdate': false, 'error': 'لا يوجد ملف تحديث متاح'};
+        }
+
         // مقارنة النسخ
         final needsUpdate = compareVersions(latestVersion, currentVersion) > 0;
 
@@ -212,6 +218,44 @@ class UpdateService {
         };
       }
       
+      // التحقق من صحة الملف
+      final fileSize = await updateFile.length();
+      print('📦 حجم الملف: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      
+      // الملف يجب أن يكون أكبر من 1MB (للتأكد أنه ليس ملف خطأ HTML)
+      if (fileSize < 1024 * 1024) {
+        // حذف الملف التالف
+        await updateFile.delete();
+        await clearDownloadedUpdate(deleteFile: false);
+        return {
+          'success': false,
+          'error': 'ملف التحديث تالف أو غير صحيح. حجمه صغير جداً.',
+        };
+      }
+      
+      // التحقق من أن الملف exe صالح (يبدأ بـ MZ header)
+      final bytes = await updateFile.openRead(0, 2).toList();
+      if (bytes.isEmpty || bytes[0].length < 2) {
+        await updateFile.delete();
+        await clearDownloadedUpdate(deleteFile: false);
+        return {
+          'success': false,
+          'error': 'ملف التحديث غير صالح',
+        };
+      }
+      
+      // التحقق من PE header (MZ)
+      final header = String.fromCharCodes(bytes[0]);
+      if (!header.startsWith('MZ')) {
+        // ملف ليس exe صالح
+        await updateFile.delete();
+        await clearDownloadedUpdate(deleteFile: false);
+        return {
+          'success': false,
+          'error': 'ملف التحديث ليس برنامج تثبيت صالح',
+        };
+      }
+      
       if (Platform.isWindows) {
         // تشغيل المثبت بوضع صامت (/SILENT) أو بواجهة (/VERYSILENT لإخفاء كل شيء)
         // نستخدم /SILENT لإظهار progress فقط دون أي تفاعل
@@ -270,24 +314,35 @@ class UpdateService {
 
   /// الحصول على رابط تحميل نسخة Windows من assets
   static String? _getWindowsDownloadUrl(List<dynamic> assets) {
+    print('🔍 البحث عن ملف التحديث في ${assets.length} assets');
+    
     // البحث عن ملف المثبت أولاً (Inno Setup)
     for (var asset in assets) {
       final name = (asset['name'] as String).toLowerCase();
+      final downloadUrl = asset['browser_download_url'] as String;
+      print('📄 وجدت: $name');
+      
       // البحث عن ملف installer أو setup
       if ((name.contains('setup') || name.contains('installer')) && name.endsWith('.exe')) {
-        return asset['browser_download_url'] as String;
+        print('✅ تم العثور على المثبت: $name');
+        print('🔗 رابط التحميل: $downloadUrl');
+        return downloadUrl;
       }
     }
     
     // إذا لم يجد، ابحث عن أي exe
     for (var asset in assets) {
       final name = (asset['name'] as String).toLowerCase();
+      final downloadUrl = asset['browser_download_url'] as String;
       if (name.endsWith('.exe')) {
-        return asset['browser_download_url'] as String;
+        print('✅ تم العثور على exe: $name');
+        print('🔗 رابط التحميل: $downloadUrl');
+        return downloadUrl;
       }
     }
     
-    return releasesUrl; // إذا لم يجد ملف مباشر، يعيد رابط صفحة الإصدارات
+    print('❌ لم يتم العثور على ملف exe في الإصدار');
+    return null; // إذا لم يجد ملف مباشر، يعيد null
   }
 
   /// مقارنة الإصدارات (semantic versioning)

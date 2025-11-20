@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "إدارة الطيف"
-#define MyAppVersion "1.2.10"
+#define MyAppVersion "1.2.11"
 #define MyAppPublisher "MjtbaTheGreatest"
 #define MyAppURL "https://github.com/MjtbaTheGreatest/mangment"
 #define MyAppExeName "my_system.exe"

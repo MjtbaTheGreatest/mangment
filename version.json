@@ -1,8 +1,8 @@
 {
-  "version": "1.2.10",
-  "build_number": 6,
-  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.10/TaifManagement-Setup.exe",
-  "changelog": "🎉 إصدار 1.2.10\n\n🔧 إصلاحات:\n• إصلاح مشكلة تحديث شريط التقدم عند تحميل التحديث\n• تحسين تجربة التحديث للموظف\n• تحديث واجهة التحميل",
+  "version": "1.2.11",
+  "build_number": 7,
+  "download_url": "https://github.com/MjtbaTheGreatest/mangment/releases/download/v1.2.11/TaifManagement-Setup.exe",
+  "changelog": "🎉 إصدار 1.2.11\n\n🔧 إصلاحات هامة:\n• إصلاح خطأ 'ProcessException: %1 is not a valid Win32 application'\n• التحقق من صحة ملف التحديث قبل التثبيت\n• حذف تلقائي للملفات التالفة\n• تحسين رسائل الخطأ",
   "mandatory": false,
   "min_version": "1.0.0",
   "release_date": "2025-11-20",
