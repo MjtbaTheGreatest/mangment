@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../styles/app_colors.dart';
 import '../styles/app_text_styles.dart';
+import '../services/api_service.dart';
 
 /// Drawer موحد لجميع الصفحات - يحتوي على جميع الروابط
 class AppDrawer extends StatelessWidget {
@@ -142,17 +143,36 @@ class AppDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.manage_accounts,
-                      title: 'إدارة الموظفين',
-                      route: '/employees',
-                    ),
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.settings,
-                      title: 'الإعدادات',
-                      route: '/settings',
+                    // إدارة الموظفين - للمدير فقط
+                    FutureBuilder<String?>(
+                      future: ApiService.getRole(),
+                      builder: (context, snapshot) {
+                        if (snapshot.data == 'admin') {
+                          return Column(
+                            children: [
+                              _buildDrawerItem(
+                                context,
+                                icon: Icons.manage_accounts,
+                                title: 'إدارة الموظفين',
+                                route: '/employees',
+                              ),
+                              _buildDrawerItem(
+                                context,
+                                icon: Icons.admin_panel_settings,
+                                title: 'إعدادات المدير',
+                                route: '/admin-settings',
+                              ),
+                            ],
+                          );
+                        } else {
+                          return _buildDrawerItem(
+                            context,
+                            icon: Icons.settings,
+                            title: 'الإعدادات',
+                            route: '/settings',
+                          );
+                        }
+                      },
                     ),
                   ],
                 ),

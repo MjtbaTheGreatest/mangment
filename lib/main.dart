@@ -7,6 +7,8 @@ import 'screens/orders_management_screen.dart';
 import 'screens/archive_screen.dart';
 import 'screens/statistics_screen.dart';
 import 'screens/employees_management_screen.dart';
+import 'screens/employee_settings_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/capital_screen.dart' show CapitalScreen, capitalRouteObserver;
 import 'screens/settlement_screen.dart';
 import 'screens/settlements_management_screen.dart';
@@ -58,6 +60,8 @@ class MainApp extends StatelessWidget {
         '/capital': (context) => const CapitalScreen(),
         '/settlement': (context) => const SettlementScreen(),
         '/settlements-management': (context) => const SettlementsManagementScreen(),
+        '/settings': (context) => const EmployeeSettingsScreen(),
+        '/admin-settings': (context) => const SettingsScreen(),
       },
     );
   }
