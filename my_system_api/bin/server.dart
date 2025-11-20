@@ -10,9 +10,11 @@ import 'product_handlers.dart' as prod;
 import 'order_handlers.dart' as ord;
 import 'settlement_handlers.dart' as settle;
 import 'payment_methods_handlers.dart' as payment;
+import 'custom_categories_handlers.dart' as custom;
+import 'shared_games_handlers.dart' as games;
 
 const String secretKey = 'your-super-secret-key-change-this-2024';
-const int port = 53365;
+const int port = 53366; // تغيير مؤقت - المنفذ الأصلي 53365 مشغول
 const String dbPath = 'database.db';
 
 Database? db;
@@ -256,6 +258,72 @@ void main() async {
   // إنشاء جدول طرق الدفع
   payment.initializePaymentMethodsTable();
 
+  // إنشاء جداول الأقسام المخصصة
+  db!.execute('''
+    CREATE TABLE IF NOT EXISTS custom_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  ''');
+
+  db!.execute('''
+    CREATE TABLE IF NOT EXISTS custom_category_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES custom_categories(id) ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      UNIQUE(category_id, product_id)
+    )
+  ''');
+
+  db!.execute('''
+    CREATE TABLE IF NOT EXISTS custom_categories_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      share_with_employees INTEGER DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  ''');
+
+  print('✅ تم إنشاء جداول الأقسام المخصصة');
+
+  // إنشاء جداول الألعاب المشتركة
+  db!.execute('''
+    CREATE TABLE IF NOT EXISTS shared_games (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_name TEXT NOT NULL,
+      email TEXT,
+      password TEXT,
+      max_users INTEGER DEFAULT 1,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by INTEGER NOT NULL,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+    )
+  ''');
+
+  db!.execute('''
+    CREATE TABLE IF NOT EXISTS shared_game_customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id INTEGER NOT NULL,
+      customer_name TEXT NOT NULL,
+      device_name TEXT,
+      amount_paid REAL,
+      purchase_date TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT NOT NULL,
+      FOREIGN KEY (game_id) REFERENCES shared_games(id) ON DELETE CASCADE
+    )
+  ''');
+
+  print('✅ تم إنشاء جداول الألعاب المشتركة');
+
   final router = Router()
     ..post('/api/login', _loginHandler)
     ..post('/api/users/create', _createUserHandler)
@@ -321,7 +389,26 @@ void main() async {
     ..get('/api/payment-methods', payment.getAllPaymentMethods)
     ..post('/api/payment-methods', payment.addPaymentMethod)
     ..put('/api/payment-methods/<id>', payment.updatePaymentMethod)
-    ..delete('/api/payment-methods/<id>', payment.deletePaymentMethod);
+    ..delete('/api/payment-methods/<id>', payment.deletePaymentMethod)
+    // Custom Categories routes (المسارات المحددة أولاً قبل المسارات مع معاملات)
+    ..get('/api/custom-categories/settings', (request) => custom.getCustomCategoriesSettings(request, db!))
+    ..put('/api/custom-categories/settings', (request) => custom.updateCustomCategoriesSettings(request, db!))
+    ..get('/api/custom-categories/all', (request) => custom.getAllCustomCategories(request, db!))
+    ..get('/api/custom-categories', (request) => custom.getCustomCategories(request, db!))
+    ..post('/api/custom-categories', (request) => custom.createCustomCategory(request, db!))
+    ..delete('/api/custom-categories/<id>', (request, id) => custom.deleteCustomCategory(request, db!, id))
+    ..get('/api/custom-categories/<id>/products', (request, id) => custom.getCategoryProducts(request, db!, id))
+    ..post('/api/custom-categories/<id>/products', (request, id) => custom.addProductToCategory(request, db!, id))
+    ..delete('/api/custom-categories/<id>/products/<productId>', (request, id, productId) => custom.removeProductFromCategory(request, db!, id, productId))
+    // Shared Games routes
+    ..get('/api/shared-games', (request) => games.getSharedGames(request, db!))
+    ..post('/api/shared-games', (request) => games.createSharedGame(request, db!))
+    ..put('/api/shared-games/<id>', (request, id) => games.updateSharedGame(request, db!, id))
+    ..delete('/api/shared-games/<id>', (request, id) => games.deleteSharedGame(request, db!, id))
+    ..get('/api/shared-games/<id>/customers', (request, id) => games.getGameCustomers(request, db!, id))
+    ..post('/api/shared-games/<id>/customers', (request, id) => games.addGameCustomer(request, db!, id))
+    ..put('/api/shared-game-customers/<id>', (request, id) => games.updateGameCustomer(request, db!, id))
+    ..delete('/api/shared-game-customers/<id>', (request, id) => games.deleteGameCustomer(request, db!, id));
 
   final handler = const Pipeline()
       .addMiddleware(_corsMiddleware())

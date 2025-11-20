@@ -17,7 +17,7 @@ class EmployeeSettingsScreen extends StatefulWidget {
 
 class _EmployeeSettingsScreenState extends State<EmployeeSettingsScreen> {
   String _currentVersion = '...';
-  bool _isCheckingUpdate = false;
+  final bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -1007,6 +1007,21 @@ class _EmployeeSettingsScreenState extends State<EmployeeSettingsScreen> {
                               ),
                             )
                           : Icon(Icons.chevron_left, color: AppColors.primaryGold),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // تخصيص الأقسام
+                  FadeInUp(
+                    duration: const Duration(milliseconds: 600),
+                    delay: const Duration(milliseconds: 150),
+                    child: _buildSettingsCard(
+                      icon: Icons.category,
+                      title: 'تخصيص الأقسام',
+                      subtitle: 'إنشاء أقسام خاصة للمنتجات',
+                      onTap: () => Navigator.pushNamed(context, '/custom-categories'),
+                      trailing: Icon(Icons.chevron_left, color: AppColors.primaryGold),
                     ),
                   ),
 

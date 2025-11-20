@@ -38,7 +38,7 @@ class _EmployeesManagementScreenState extends State<EmployeesManagementScreen> {
       }
 
       final response = await http.get(
-        Uri.parse('http://localhost:53365/api/users/list'),
+        Uri.parse('http://localhost:53366/api/users/list'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -80,7 +80,7 @@ class _EmployeesManagementScreenState extends State<EmployeesManagementScreen> {
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('http://localhost:53365/api/orders'),
+        Uri.parse('http://localhost:53366/api/orders'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -355,7 +355,7 @@ class _EmployeesManagementScreenState extends State<EmployeesManagementScreen> {
       }
 
       final response = await http.post(
-        Uri.parse('http://localhost:53365/api/users/create'),
+        Uri.parse('http://localhost:53366/api/users/create'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -848,7 +848,7 @@ class _EmployeesManagementScreenState extends State<EmployeesManagementScreen> {
 
       if (password.isNotEmpty) {
         final response = await http.put(
-          Uri.parse('http://localhost:53365/api/users/$id/password'),
+          Uri.parse('http://localhost:53366/api/users/$id/password'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
@@ -934,7 +934,7 @@ class _EmployeesManagementScreenState extends State<EmployeesManagementScreen> {
       }
 
       final response = await http.delete(
-        Uri.parse('http://localhost:53365/api/users/$id'),
+        Uri.parse('http://localhost:53366/api/users/$id'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

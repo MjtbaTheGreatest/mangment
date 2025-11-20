@@ -4,7 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Production API endpoint via Cloudflare Tunnel
-  static const String baseUrl = 'https://admin.taif.digital/api';
+  // static const String baseUrl = 'https://admin.taif.digital/api';
+  
+  // Local development (منفذ مؤقت)
+  static const String baseUrl = 'http://localhost:53366/api';
 
   static Future<Map<String, dynamic>> login(
       String username, String password) async {
@@ -1801,6 +1804,562 @@ class ApiService {
         final data = json.decode(response.body);
         return {'success': false, 'message': data['message'] ?? 'خطأ في الحذف'};
       }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  // =============== Custom Categories APIs ===============
+  
+  /// الحصول على الأقسام المخصصة للمستخدم
+  static Future<Map<String, dynamic>> getCustomCategories() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'categories': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/custom-categories'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'categories': data['categories'] ?? [],
+        };
+      } else {
+        return {'success': false, 'categories': []};
+      }
+    } catch (e) {
+      print('خطأ في جلب الأقسام المخصصة: $e');
+      return {'success': false, 'categories': []};
+    }
+  }
+
+  /// إنشاء قسم مخصص جديد
+  static Future<Map<String, dynamic>> createCustomCategory(String name) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/custom-categories'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'name': name}),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'success': true,
+          'category': data['category'],
+          'message': data['message'] ?? 'تم إنشاء القسم بنجاح',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'فشل إنشاء القسم',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// حذف قسم مخصص
+  static Future<Map<String, dynamic>> deleteCustomCategory(int categoryId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/custom-categories/$categoryId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم حذف القسم',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'فشل حذف القسم',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// الحصول على منتجات قسم معين
+  static Future<Map<String, dynamic>> getCategoryProducts(int categoryId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'product_ids': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/custom-categories/$categoryId/products'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'product_ids': data['product_ids'] ?? [],
+        };
+      } else {
+        return {'success': false, 'product_ids': []};
+      }
+    } catch (e) {
+      return {'success': false, 'product_ids': []};
+    }
+  }
+
+  /// إضافة منتج إلى قسم
+  static Future<Map<String, dynamic>> addProductToCategory(int categoryId, int productId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/custom-categories/$categoryId/products'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'product_id': productId}),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم إضافة المنتج',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'فشل إضافة المنتج',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// إزالة منتج من قسم
+  static Future<Map<String, dynamic>> removeProductFromCategory(int categoryId, int productId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/custom-categories/$categoryId/products/$productId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم إزالة المنتج',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'فشل إزالة المنتج',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// الحصول على إعدادات الأقسام المخصصة
+  static Future<Map<String, dynamic>> getCustomCategoriesSettings() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'share_with_employees': false};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/custom-categories/settings'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'share_with_employees': data['share_with_employees'] ?? false,
+        };
+      } else {
+        return {'success': false, 'share_with_employees': false};
+      }
+    } catch (e) {
+      return {'success': false, 'share_with_employees': false};
+    }
+  }
+
+  /// تحديث إعدادات الأقسام المخصصة
+  static Future<Map<String, dynamic>> updateCustomCategoriesSettings({
+    required bool shareWithEmployees,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/custom-categories/settings'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({'share_with_employees': shareWithEmployees}),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'تم تحديث الإعدادات',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'فشل تحديث الإعدادات',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// الحصول على جميع الأقسام المخصصة (للمدير فقط)
+  static Future<Map<String, dynamic>> getAllCustomCategories() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'categories': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/custom-categories/all'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'categories': data['categories'] ?? [],
+        };
+      } else {
+        return {'success': false, 'categories': []};
+      }
+    } catch (e) {
+      return {'success': false, 'categories': []};
+    }
+  }
+
+  // ==========================================
+  // Shared Games API Functions
+  // ==========================================
+
+  /// الحصول على جميع الألعاب المشتركة
+  static Future<Map<String, dynamic>> getSharedGames() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'games': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/shared-games'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'games': data['games'] ?? [],
+        };
+      } else {
+        return {'success': false, 'games': []};
+      }
+    } catch (e) {
+      return {'success': false, 'games': []};
+    }
+  }
+
+  /// إنشاء لعبة مشتركة جديدة
+  static Future<Map<String, dynamic>> createSharedGame({
+    required String gameName,
+    String? email,
+    String? password,
+    int? maxUsers,
+    String? notes,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/shared-games'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'game_name': gameName,
+          'email': email,
+          'password': password,
+          'max_users': maxUsers,
+          'notes': notes,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// تحديث بيانات لعبة مشتركة
+  static Future<Map<String, dynamic>> updateSharedGame({
+    required int gameId,
+    required String gameName,
+    String? email,
+    String? password,
+    int? maxUsers,
+    String? notes,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/shared-games/$gameId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'game_name': gameName,
+          'email': email,
+          'password': password,
+          'max_users': maxUsers,
+          'notes': notes,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// حذف لعبة مشتركة
+  static Future<Map<String, dynamic>> deleteSharedGame(int gameId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/shared-games/$gameId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// الحصول على عملاء لعبة معينة
+  static Future<Map<String, dynamic>> getGameCustomers(int gameId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'customers': []};
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/shared-games/$gameId/customers'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'customers': data['customers'] ?? [],
+        };
+      } else {
+        return {'success': false, 'customers': []};
+      }
+    } catch (e) {
+      return {'success': false, 'customers': []};
+    }
+  }
+
+  /// إضافة عميل إلى لعبة
+  static Future<Map<String, dynamic>> addGameCustomer({
+    required int gameId,
+    required String customerName,
+    String? deviceName,
+    double? amountPaid,
+    String? purchaseDate,
+    String? notes,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/shared-games/$gameId/customers'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'customer_name': customerName,
+          'device_name': deviceName,
+          'amount_paid': amountPaid,
+          'purchase_date': purchaseDate,
+          'notes': notes,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// تحديث بيانات عميل
+  static Future<Map<String, dynamic>> updateGameCustomer({
+    required int customerId,
+    required String customerName,
+    String? deviceName,
+    double? amountPaid,
+    String? purchaseDate,
+    String? notes,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/shared-game-customers/$customerId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'customer_name': customerName,
+          'device_name': deviceName,
+          'amount_paid': amountPaid,
+          'purchase_date': purchaseDate,
+          'notes': notes,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
+    }
+  }
+
+  /// حذف عميل من لعبة
+  static Future<Map<String, dynamic>> deleteGameCustomer(int customerId) async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        return {'success': false, 'message': 'غير مسجل دخول'};
+      }
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/shared-game-customers/$customerId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      final data = json.decode(response.body);
+      return data;
     } catch (e) {
       return {'success': false, 'message': 'خطأ في الاتصال: ${e.toString()}'};
     }

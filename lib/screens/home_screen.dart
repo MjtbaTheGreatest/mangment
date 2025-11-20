@@ -21,7 +21,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String _selectedCategory = 'الكل';
   String? _username;
   String? _name;
@@ -31,15 +31,42 @@ class _HomeScreenState extends State<HomeScreen> {
   String _cardSize = 'صغير جداً'; // الافتراضي: صغير جداً
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _paymentMethods = []; // طرق الدفع من API
+  List<Map<String, dynamic>> _customCategories = []; // الأقسام المخصصة
+  final Map<int, List<int>> _categoryProductsCache = {}; // كاش للمنتجات في كل قسم مخصص
+  
+  // متغيرات البحث
+  bool _isSearchVisible = false;
+  final TextEditingController _searchController = TextEditingController();
+  late AnimationController _searchAnimationController;
+  late Animation<double> _searchAnimation;
 
   @override
   void initState() {
     super.initState();
+    
+    // تهيئة animation البحث
+    _searchAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _searchAnimation = CurvedAnimation(
+      parent: _searchAnimationController,
+      curve: Curves.easeInOut,
+    );
+    
     _loadCardSize();
     _checkAuthAndLoadUserInfo();
     _loadProducts();
     _loadPaymentMethods(); // تحميل طرق الدفع
+    _loadCustomCategories(); // تحميل الأقسام المخصصة
     _checkForUpdates();
+  }
+  
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchAnimationController.dispose();
+    super.dispose();
   }
 
   /// التحقق من وجود تحديثات عند فتح البرنامج
@@ -253,9 +280,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: ElevatedButton(
                           onPressed: () async {
                             Navigator.pop(context);
-                            // TODO: استدعاء دالة التحميل والتثبيت
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('للتحميل، اذهب إلى الإعدادات > التحقق من التحديثات')),
+                            // الانتقال إلى صفحة الإعدادات
+                            Navigator.pushNamed(
+                              context,
+                              _role == 'admin' ? '/admin-settings' : '/settings',
                             );
                           },
                           style: ElevatedButton.styleFrom(
@@ -270,10 +298,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.download, size: 20),
+                              const Icon(Icons.settings, size: 20),
                               const SizedBox(width: 8),
                               Text(
-                                'تحميل',
+                                'الذهاب للإعدادات',
                                 style: AppTextStyles.bodyLarge.copyWith(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -354,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadPaymentMethods() async {
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:53365/api/payment-methods'),
+        Uri.parse('http://localhost:53366/api/payment-methods'),
       );
       
       if (response.statusCode == 200) {
@@ -379,6 +407,52 @@ class _HomeScreenState extends State<HomeScreen> {
           ];
         });
       }
+    }
+  }
+
+  /// تحميل الأقسام المخصصة
+  Future<void> _loadCustomCategories() async {
+    try {
+      // إذا كان الدور admin، جلب جميع الأقسام
+      final response = _role == 'admin'
+          ? await ApiService.getAllCustomCategories()
+          : await ApiService.getCustomCategories();
+      
+      if (response['success'] == true && mounted) {
+        setState(() {
+          _customCategories = List<Map<String, dynamic>>.from(
+            response['categories'] ?? []
+          );
+          print('📁 Custom categories loaded: ${_customCategories.length}');
+        });
+        
+        // تحميل المنتجات لكل قسم مخصص
+        for (var category in _customCategories) {
+          _loadCategoryProducts(category['id']);
+        }
+      }
+    } catch (e) {
+      print('❌ Error loading custom categories: $e');
+      // في حالة الخطأ، الأقسام المخصصة تبقى فارغة
+    }
+  }
+
+  /// تحميل المنتجات في قسم مخصص معين
+  Future<void> _loadCategoryProducts(int categoryId) async {
+    try {
+      print('🔄 تحميل منتجات القسم $categoryId...');
+      final response = await ApiService.getCategoryProducts(categoryId);
+      print('📦 استجابة منتجات القسم: $response');
+      
+      if (response['success'] == true && mounted) {
+        final productIds = List<int>.from(response['product_ids'] ?? []);
+        print('✅ تم تحميل ${productIds.length} منتج للقسم $categoryId');
+        setState(() {
+          _categoryProductsCache[categoryId] = productIds;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading category products: $e');
     }
   }
 
@@ -441,105 +515,403 @@ class _HomeScreenState extends State<HomeScreen> {
       duration: const Duration(milliseconds: 600),
       child: Container(
         padding: const EdgeInsets.all(20),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: Icon(Icons.menu, color: AppColors.primaryGold, size: 28),
-                    onPressed: () {
-                      Scaffold.of(context).openDrawer();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // زر الإعدادات في الـ Navbar
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      _role == 'admin' ? '/admin-settings' : '/settings',
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.primaryGold.withOpacity(0.2),
-                      border: Border.all(
-                        color: AppColors.primaryGold.withOpacity(0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.settings,
-                      color: AppColors.primaryGold,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
                   children: [
-                    Text(
-                      'مرحباً، ${_name ?? _username ?? 'مستخدم'}',
-                      style: AppTextStyles.headlineMedium.copyWith(
-                        color: AppColors.textGold,
+                    Builder(
+                      builder: (context) => IconButton(
+                        icon: Icon(Icons.menu, color: AppColors.primaryGold, size: 28),
+                        onPressed: () {
+                          Scaffold.of(context).openDrawer();
+                        },
                       ),
                     ),
-                    Text(
-                      _role == 'admin' ? 'مدير النظام' : 'موظف',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
+                    const SizedBox(width: 8),
+                    // زر التحديث
+                    GestureDetector(
+                      onTap: () async {
+                        setState(() => _isLoading = true);
+                        await _loadProducts();
+                        await _loadPaymentMethods();
+                        await _loadCustomCategories();
+                        setState(() => _isLoading = false);
+                        
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('✓ تم تحديث البيانات'),
+                              backgroundColor: Colors.green.shade700,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              duration: const Duration(seconds: 1),
+                              margin: const EdgeInsets.all(16),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primaryGold.withOpacity(0.2),
+                          border: Border.all(
+                            color: AppColors.primaryGold.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: _isLoading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryGold),
+                              ),
+                            )
+                          : Icon(
+                              Icons.refresh_rounded,
+                              color: AppColors.primaryGold,
+                              size: 20,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // زر الإعدادات في الـ Navbar
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          _role == 'admin' ? '/admin-settings' : '/settings',
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primaryGold.withOpacity(0.2),
+                          border: Border.all(
+                            color: AppColors.primaryGold.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.settings,
+                          color: AppColors.primaryGold,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // زر البحث مع animation
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _toggleSearch,
+                        borderRadius: BorderRadius.circular(50),
+                        splashColor: AppColors.primaryGold.withOpacity(0.3),
+                        highlightColor: AppColors.primaryGold.withOpacity(0.1),
+                        child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: _isSearchVisible 
+                            ? AppColors.goldGradient
+                            : null,
+                          color: _isSearchVisible 
+                            ? null 
+                            : AppColors.primaryGold.withOpacity(0.2),
+                          border: Border.all(
+                            color: AppColors.primaryGold.withOpacity(_isSearchVisible ? 0.8 : 0.5),
+                            width: _isSearchVisible ? 2 : 1,
+                          ),
+                          boxShadow: _isSearchVisible ? [
+                            BoxShadow(
+                              color: AppColors.primaryGold.withOpacity(0.5),
+                              blurRadius: 16,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 4),
+                            ),
+                          ] : [
+                            BoxShadow(
+                              color: AppColors.primaryGold.withOpacity(0.1),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: AnimatedRotation(
+                          duration: const Duration(milliseconds: 300),
+                          turns: _isSearchVisible ? 0.125 : 0,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            transitionBuilder: (child, animation) {
+                              return ScaleTransition(
+                                scale: animation,
+                                child: RotationTransition(
+                                  turns: Tween<double>(begin: 0.5, end: 1.0).animate(animation),
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Icon(
+                              _isSearchVisible ? Icons.close : Icons.search,
+                              key: ValueKey(_isSearchVisible),
+                              color: _isSearchVisible 
+                                ? AppColors.pureBlack
+                                : AppColors.primaryGold,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      _role == 'admin' ? '/admin-settings' : '/settings',
-                    );
-                  },
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppColors.goldGradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryGold.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'مرحباً، ${_name ?? _username ?? 'مستخدم'}',
+                          style: AppTextStyles.headlineMedium.copyWith(
+                            color: AppColors.textGold,
+                          ),
+                        ),
+                        Text(
+                          _role == 'admin' ? 'مدير النظام' : 'موظف',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
-                    child: Icon(
-                      Icons.person,
-                      color: AppColors.pureBlack,
-                      size: 24,
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          _role == 'admin' ? '/admin-settings' : '/settings',
+                        );
+                      },
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: AppColors.goldGradient,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryGold.withOpacity(0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.person,
+                          color: AppColors.pureBlack,
+                          size: 24,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
+            ),
+            
+            // شريط البحث بـ animation محسن
+            AnimatedSize(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.fastEaseInToSlowEaseOut,
+              alignment: Alignment.topCenter,
+              child: _isSearchVisible
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: _buildSearchBar(),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
       ),
     );
   }
+  
+  /// بناء شريط البحث مع animation محسن
+  Widget _buildSearchBar() {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, -0.5),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(
+        parent: _searchAnimationController,
+        curve: Curves.easeOutCubic,
+      )),
+      child: FadeTransition(
+        opacity: _searchAnimationController,
+        child: ScaleTransition(
+          scale: Tween<double>(
+            begin: 0.95,
+            end: 1.0,
+          ).animate(CurvedAnimation(
+            parent: _searchAnimationController,
+            curve: Curves.easeOutBack,
+          )),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primaryGold.withOpacity(0.2),
+                  AppColors.mediumGold.withOpacity(0.15),
+                  AppColors.primaryGold.withOpacity(0.1),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.primaryGold.withOpacity(0.4),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryGold.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: AppColors.pureBlack.withOpacity(0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.pureBlack.withOpacity(0.3),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _filterProducts,
+                    autofocus: true,
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      color: AppColors.textGold,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.5,
+                    ),
+                    cursorColor: AppColors.primaryGold,
+                    cursorWidth: 3,
+                    cursorHeight: 24,
+                    decoration: InputDecoration(
+                      hintText: 'ابحث عن منتج... 🔍',
+                      hintStyle: AppTextStyles.bodyLarge.copyWith(
+                        color: AppColors.textSecondary.withOpacity(0.6),
+                        fontWeight: FontWeight.w400,
+                      ),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: AppColors.goldGradient,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryGold.withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.search,
+                            color: AppColors.pureBlack,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.textSecondary.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.close,
+                                  color: AppColors.textGold,
+                                  size: 18,
+                                ),
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                _filterProducts('');
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  /// تبديل ظهور البحث مع animation محسن
+  void _toggleSearch() {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+      if (!_isSearchVisible) {
+        // إخفاء البحث
+        _searchAnimationController.reverse().then((_) {
+          _searchController.clear();
+          _filterProducts('');
+        });
+      } else {
+        // إظهار البحث
+        _searchAnimationController.reset();
+        _searchAnimationController.forward();
+      }
+    });
+  }
+  
+  /// فلترة المنتجات حسب البحث
+  void _filterProducts(String query) {
+    setState(() {
+      // سيتم تطبيق الفلتر في _getFilteredProducts
+    });
+  }
 
   Widget _buildCategoryTabs() {
-    final categories = ['الكل', 'ألعاب', 'اشتراكات'];
+    // دمج الأقسام الافتراضية مع الأقسام المخصصة
+    final defaultCategories = ['الكل', 'ألعاب', 'اشتراكات', 'ألعاب مشتركة'];
+    final customCategoryNames = _customCategories.map((c) => c['name'] as String).toList();
+    final categories = [...defaultCategories, ...customCategoryNames];
+    
+    print('📊 عرض ${categories.length} قسم: $categories');
+    print('📁 أقسام مخصصة: $_customCategories');
     
     return FadeInLeft(
       duration: const Duration(milliseconds: 600),
@@ -856,9 +1228,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildProductsGrid() {
     // تصفية المنتجات حسب القسم المحدد
-    final filteredProducts = _selectedCategory == 'الكل'
-        ? _products
-        : _products.where((p) => p['category'] == _selectedCategory).toList();
+    var filteredProducts = _products;
+    
+    // التحقق من نوع القسم
+    final defaultCategories = ['الكل', 'ألعاب', 'اشتراكات', 'ألعاب مشتركة'];
+    
+    if (_selectedCategory == 'الكل') {
+      // عرض جميع المنتجات
+      filteredProducts = _products;
+    } else if (defaultCategories.contains(_selectedCategory)) {
+      // قسم افتراضي - فلتر عادي
+      filteredProducts = _products.where((p) => p['category'] == _selectedCategory).toList();
+    } else {
+      // قسم مخصص - استخدام الكاش
+      final selectedCustomCategory = _customCategories.firstWhere(
+        (c) => c['name'] == _selectedCategory,
+        orElse: () => {},
+      );
+      
+      if (selectedCustomCategory.isNotEmpty) {
+        final categoryId = selectedCustomCategory['id'] as int;
+        final productIds = _categoryProductsCache[categoryId] ?? [];
+        
+        // فلترة المنتجات بناءً على IDs المحفوظة
+        filteredProducts = _products.where((p) {
+          final productId = p['id'] as int?;
+          return productId != null && productIds.contains(productId);
+        }).toList();
+      }
+    }
+    
+    // تصفية حسب البحث
+    if (_searchController.text.isNotEmpty) {
+      final searchQuery = _searchController.text.toLowerCase();
+      filteredProducts = filteredProducts.where((product) {
+        final name = (product['name'] ?? '').toString().toLowerCase();
+        final category = (product['category'] ?? '').toString().toLowerCase();
+        return name.contains(searchQuery) || category.contains(searchQuery);
+      }).toList();
+    }
 
     // تحديد عدد الأعمدة حسب حجم البطاقة
     int crossAxisCount;
@@ -1115,13 +1523,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: AppTextStyles.bodyMedium.copyWith(
                         color: AppColors.textPrimary,
                       ),
-                      items: ['ألعاب', 'اشتراكات'].map((category) {
+                      items: ['ألعاب', 'اشتراكات', 'ألعاب مشتركة'].map((category) {
                         return DropdownMenuItem(
                           value: category,
                           child: Row(
                             children: [
                               Icon(
-                                category == 'ألعاب' ? Icons.games : Icons.subscriptions,
+                                category == 'ألعاب' 
+                                  ? Icons.games 
+                                  : category == 'اشتراكات'
+                                    ? Icons.subscriptions
+                                    : Icons.sports_esports_rounded,
                                 color: AppColors.primaryGold,
                                 size: 20,
                               ),
@@ -1292,10 +1704,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showOrderDialog(Map<String, dynamic> product) {
     final isSubscription = product['category'] == 'اشتراكات';
+    final isSharedGame = product['category'] == 'ألعاب مشتركة';
     
     final productNameController = TextEditingController(text: product['name']);
     final customerNameController = TextEditingController();
     final profileNameController = TextEditingController(); // للاشتراكات
+    final deviceNameController = TextEditingController(); // للألعاب المشتركة
     
     final costPrice = (product['cost_price'] ?? 0).toDouble();
     final sellPrice = (product['sell_price'] ?? costPrice).toDouble();
@@ -1317,6 +1731,11 @@ class _HomeScreenState extends State<HomeScreen> {
     int? selectedServiceId;
     bool loadingServices = isSubscription;
 
+    // للألعاب المشتركة: تحميل قائمة الألعاب المتاحة
+    List<Map<String, dynamic>> availableGames = [];
+    int? selectedGameId;
+    bool loadingGames = isSharedGame;
+
     // تحميل الخدمات إذا كان اشتراك
     if (isSubscription) {
       ApiService.getSubscriptions().then((response) {
@@ -1335,6 +1754,33 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
         loadingServices = false;
+      });
+    }
+
+    // تحميل الألعاب إذا كانت لعبة مشتركة
+    if (isSharedGame) {
+      ApiService.getSharedGames().then((response) {
+        if (response['success'] == true) {
+          final games = response['games'] as List;
+          availableGames = games.map((g) => {
+            'id': g['id'],
+            'game_name': g['game_name'] ?? 'غير محدد',
+            'max_users': g['max_users'] ?? 1,
+            'customers_count': g['customers_count'] ?? 0,
+          }).toList();
+          
+          // فلترة الألعاب غير الممتلئة فقط
+          availableGames = availableGames.where((g) {
+            final count = g['customers_count'] as int;
+            final max = g['max_users'] as int;
+            return count < max;
+          }).toList();
+          
+          if (availableGames.isNotEmpty) {
+            selectedGameId = availableGames.first['id'] as int;
+          }
+        }
+        loadingGames = false;
       });
     }
 
@@ -1520,6 +1966,102 @@ class _HomeScreenState extends State<HomeScreen> {
                                     controller: profileNameController,
                                     label: 'اسم البروفايل *',
                                     icon: Icons.account_circle,
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+
+                                // اختيار اللعبة (للألعاب المشتركة فقط)
+                                if (isSharedGame) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.glassBlack,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: AppColors.glassWhite),
+                                    ),
+                                    child: loadingGames
+                                        ? Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Center(
+                                              child: SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: AppColors.primaryGold,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : DropdownButtonHideUnderline(
+                                            child: DropdownButton<int>(
+                                              value: selectedGameId,
+                                              isExpanded: true,
+                                              dropdownColor: AppColors.charcoal,
+                                              icon: Icon(Icons.arrow_drop_down, color: AppColors.primaryGold),
+                                              style: AppTextStyles.bodyMedium.copyWith(
+                                                color: AppColors.textPrimary,
+                                              ),
+                                              hint: Text(
+                                                availableGames.isEmpty ? 'لا توجد ألعاب متاحة' : 'اختر اللعبة *',
+                                                style: AppTextStyles.bodyMedium.copyWith(
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                              ),
+                                              items: availableGames.map((game) {
+                                                final count = game['customers_count'] as int;
+                                                final max = game['max_users'] as int;
+                                                return DropdownMenuItem<int>(
+                                                  value: game['id'] as int,
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.sports_esports,
+                                                        color: AppColors.primaryGold,
+                                                        size: 20,
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Text(
+                                                              '${game['game_name']}',
+                                                              style: AppTextStyles.bodyMedium.copyWith(
+                                                                color: AppColors.textPrimary,
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                              overflow: TextOverflow.ellipsis,
+                                                            ),
+                                                            Text(
+                                                              'العملاء: $count / $max',
+                                                              style: AppTextStyles.bodySmall.copyWith(
+                                                                color: AppColors.textSecondary,
+                                                                fontSize: 11,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                              onChanged: availableGames.isEmpty ? null : (value) {
+                                                setDialogState(() {
+                                                  selectedGameId = value;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  _buildDialogTextField(
+                                    controller: deviceNameController,
+                                    label: 'اسم الجهاز (اختياري)',
+                                    icon: Icons.devices,
                                   ),
                                   const SizedBox(height: 16),
                                 ],
@@ -1805,6 +2347,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     return;
                   }
 
+                  // التحقق من اختيار اللعبة للألعاب المشتركة
+                  if (isSharedGame && selectedGameId == null) {
+                    AnimatedNotification.show(
+                      context,
+                      message: '⚠️ يرجى اختيار اللعبة',
+                      type: NotificationType.warning,
+                    );
+                    return;
+                  }
+
+                  // التحقق من توفر مكان للألعاب المشتركة
+                  if (isSharedGame && selectedGameId != null) {
+                    final selectedGame = availableGames.firstWhere((g) => g['id'] == selectedGameId);
+                    final count = selectedGame['customers_count'] as int;
+                    final max = selectedGame['max_users'] as int;
+                    if (count >= max) {
+                      AnimatedNotification.show(
+                        context,
+                        message: '⚠️ اللعبة ممتلئة، يرجى اختيار لعبة أخرى',
+                        type: NotificationType.warning,
+                      );
+                      return;
+                    }
+                  }
+
                   final price = double.tryParse(priceController.text);
                   if (price == null || price <= 0) {
                     AnimatedNotification.show(
@@ -1831,8 +2398,39 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   Map<String, dynamic> result;
                   
+                  // إذا كانت لعبة مشتركة، نضيف العميل للعبة المختارة
+                  if (isSharedGame && selectedGameId != null) {
+                    result = await ApiService.addGameCustomer(
+                      gameId: selectedGameId!,
+                      customerName: customerNameController.text.trim(),
+                      deviceName: deviceNameController.text.trim(),
+                      amountPaid: price,
+                      purchaseDate: DateTime.now().toIso8601String().split('T')[0],
+                      notes: notesController.text.trim(),
+                    );
+                    
+                    // الحصول على اسم اللعبة المختارة
+                    final selectedGame = availableGames.firstWhere(
+                      (g) => g['id'] == selectedGameId,
+                      orElse: () => {'game_name': 'غير محدد'},
+                    );
+                    
+                    // أيضاً نسجل الطلب للتقارير
+                    await ApiService.createOrder(
+                      productId: product['id'] ?? 0,
+                      productName: '${product['name']} - ${selectedGame['game_name']}',
+                      customerName: customerNameController.text.trim(),
+                      customerPhone: null,
+                      cost: double.tryParse(costController.text) ?? 0,
+                      price: price,
+                      profit: calculatedProfit,
+                      paymentMethod: paymentMethod,
+                      category: product['category'] ?? 'غير محدد',
+                      notes: 'لعبة: ${selectedGame['game_name']}${deviceNameController.text.trim().isNotEmpty ? ' | جهاز: ${deviceNameController.text.trim()}' : ''}${notesController.text.trim().isNotEmpty ? ' | ${notesController.text.trim()}' : ''}',
+                    );
+                  } 
                   // إذا كان اشتراك، نضيف المشترك للخدمة المختارة
-                  if (isSubscription && selectedServiceId != null) {
+                  else if (isSubscription && selectedServiceId != null) {
                     // حساب عدد الأشهر من المدة المختارة
                     int months = 1;
                     if (subscriptionDuration == 'شهرين') {
@@ -2110,6 +2708,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () {
                             Navigator.pop(context);
                             Navigator.pushNamed(context, '/subscriptions');
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.sports_esports_rounded,
+                          title: 'الألعاب المشتركة',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.pushNamed(context, '/shared-games');
                           },
                         ),
                         _buildDrawerItem(

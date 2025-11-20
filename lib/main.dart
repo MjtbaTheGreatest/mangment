@@ -12,6 +12,8 @@ import 'screens/settings_screen.dart';
 import 'screens/capital_screen.dart' show CapitalScreen, capitalRouteObserver;
 import 'screens/settlement_screen.dart';
 import 'screens/settlements_management_screen.dart';
+import 'screens/custom_categories_screen.dart';
+import 'screens/shared_games_screen.dart';
 import 'services/api_service.dart';
 import 'services/update_service.dart';
 import 'widgets/update_dialog.dart';
@@ -62,6 +64,8 @@ class MainApp extends StatelessWidget {
         '/settlements-management': (context) => const SettlementsManagementScreen(),
         '/settings': (context) => const EmployeeSettingsScreen(),
         '/admin-settings': (context) => const SettingsScreen(),
+        '/custom-categories': (context) => const CustomCategoriesScreen(),
+        '/shared-games': (context) => const SharedGamesScreen(),
       },
     );
   }

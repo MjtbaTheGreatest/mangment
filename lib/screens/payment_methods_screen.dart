@@ -27,7 +27,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     setState(() => _isLoading = true);
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:53365/api/payment-methods'),
+        Uri.parse('http://localhost:53366/api/payment-methods'),
       );
 
       if (response.statusCode == 200) {
@@ -50,7 +50,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   Future<void> _addPaymentMethod(String name) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:53365/api/payment-methods'),
+        Uri.parse('http://localhost:53366/api/payment-methods'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'name': name}),
       );
@@ -73,7 +73,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
   Future<void> _updatePaymentMethod(int id, String name) async {
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:53365/api/payment-methods/$id'),
+        Uri.parse('http://localhost:53366/api/payment-methods/$id'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'name': name}),
       );
@@ -155,7 +155,7 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
     if (confirmed == true) {
       try {
         final response = await http.delete(
-          Uri.parse('http://localhost:53365/api/payment-methods/$id'),
+          Uri.parse('http://localhost:53366/api/payment-methods/$id'),
         );
 
         if (response.statusCode == 200) {
